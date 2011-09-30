@@ -54,3 +54,4 @@ examples/integercoding.pl
 examples/rand-geo.pl
 examples/test-ic.pl
 examples/tvlc-newcode.pl
+META.yml                                 Module meta-data (added by MakeMaker)
