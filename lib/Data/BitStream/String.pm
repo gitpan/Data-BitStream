@@ -11,7 +11,7 @@ BEGIN {
 use Mouse;
 
 with 'Data::BitStream::Base',
-     #'Data::BitStream::Code::Gamma',  # implemented here
+     'Data::BitStream::Code::Gamma',  # implemented here
      'Data::BitStream::Code::Delta',
      'Data::BitStream::Code::Omega',
      'Data::BitStream::Code::Levenstein',
@@ -21,6 +21,9 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Rice',
      'Data::BitStream::Code::GammaGolomb',
      'Data::BitStream::Code::ExponentialGolomb',
+     'Data::BitStream::Code::Baer',
+     'Data::BitStream::Code::BoldiVigna',
+     'Data::BitStream::Code::ARice',
      'Data::BitStream::Code::StartStop';
 
 has '_str' => (is => 'rw', default => '');

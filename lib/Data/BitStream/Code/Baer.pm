@@ -3,10 +3,15 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Baer::AUTHORITY = 'cpan:DANAJ';
+  $Data::BitStream::Code::Baer::VERSION   = '0.01';
 }
-BEGIN {
-  $Data::BitStream::Code::Baer::VERSION = '0.01';
-}
+
+our $CODEINFO = { package   => __PACKAGE__,
+                  name      => 'Baer',
+                  universal => 1,
+                  params    => 1,
+                  encodesub => sub {shift->put_baer(@_)},
+                  decodesub => sub {shift->get_baer(@_)}, };
 
 use Mouse::Role;
 requires 'read', 'write', 'put_unary', 'get_unary';
@@ -75,17 +80,26 @@ sub get_baer {
       next;
     }
     $C -= $mk;
-    my $v = $self->read(1);
-    my $val = ($v == 0)  ?  1  :  2 + $self->read(1);
-    #while ($C-- > 0) {  $val = 2 * $val + 2 + $self->read(1);  }
-    $val = ($val << $C) + ((1 << ($C+1)) - 2) + $self->read($C)  if $C > 0;
-    $val += $mk;
-    if ($k > 0) { $val = 1 + ( (($val-1) << $k) | $self->read($k) ); }
-    push @vals, $val-1;
+    my $val = ($self->read(1) == 0)  ?  1  :  2 + $self->read(1);
+
+    # Code following the logic in the paper:
+    #
+    #   while ($C-- > 0) {  $val = 2 * $val + 2 + $self->read(1);  }
+    #   $val += $mk;
+    #   if ($k > 0) { $val = ( (($val-1) << $k) | $self->read($k) ); }
+    #   $val -= 1;  # to get back to 0-base from paper's 1-base;
+    #
+    # We can unroll the while loop, and be careful with overflow of ~0
+
+    $val = ($val << $C) + $mk - 1;
+    if ($C > 0) { $val += ((1 << ($C+1)) - 2) + $self->read($C); }
+    if ($k > 0) { $val = ( ($val << $k) | $self->read($k) ); }
+
+    push @vals, $val;
   }
   wantarray ? @vals : $vals[-1];
 }
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Michael B. Baer's power law codes

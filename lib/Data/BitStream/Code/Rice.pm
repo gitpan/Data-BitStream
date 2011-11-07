@@ -3,10 +3,15 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Rice::AUTHORITY = 'cpan:DANAJ';
-}
-BEGIN {
   $Data::BitStream::Code::Rice::VERSION = '0.02';
 }
+
+our $CODEINFO = { package   => __PACKAGE__,
+                  name      => 'Rice',
+                  universal => 0,
+                  params    => 1,
+                  encodesub => sub {shift->put_rice(@_)},
+                  decodesub => sub {shift->get_rice(@_)}, };
 
 use Mouse::Role;
 requires qw(read write put_unary get_unary);
@@ -57,7 +62,7 @@ sub get_rice {
   }
   wantarray ? @vals : $vals[-1];
 }
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Rice codes
@@ -84,6 +89,12 @@ These codes are sometimes called GPO2 (Golomb-power-of-2) codes.
 
 Beware that with the default unary coding for the quotient, these codes can
 become extraordinarily long for values much larger than C<2^k>.
+
+"I<...a Rice code (and by extension a Golomb code) is very well suited to
+peaked distributions with few small values or large values.  As noted earlier,
+the Rice(k) code is extremely efficient for values in the general range
+C<2^(k-1) < N < 2^(k+2)>>"
+  -- Lossless Compression Handbook, page 75, by Khalid Sayood
 
 =head1 METHODS
 

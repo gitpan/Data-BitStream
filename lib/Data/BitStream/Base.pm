@@ -3,17 +3,44 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Base::AUTHORITY = 'cpan:DANAJ';
+  $Data::BitStream::Base::VERSION   = '0.02';
 }
-BEGIN {
-  $Data::BitStream::Base::VERSION = '0.01';
-}
+
+our $CODEINFO = [ { package   => __PACKAGE__,
+                    name      => 'Unary',
+                    universal => 0,
+                    params    => 0,
+                    encodesub => sub {shift->put_unary(@_)},
+                    decodesub => sub {shift->get_unary(@_)},
+                  },
+                  { package   => __PACKAGE__,
+                    name      => 'Unary1',
+                    universal => 0,
+                    params    => 0,
+                    encodesub => sub {shift->put_unary1(@_)},
+                    decodesub => sub {shift->get_unary1(@_)},
+                  },
+                  { package   => __PACKAGE__,
+                    name      => 'BinWord',
+                    universal => 0,
+                    params    => 1,
+                    encodesub => sub {shift->put_binword(@_)},
+                    decodesub => sub {shift->get_binword(@_)},
+                  },
+                ];
 
 use Mouse::Role;
 
 # pos is ignored while writing
-has 'pos'  => (is => 'ro', isa => 'Int', writer => '_setpos', default => 0);
-has 'len'  => (is => 'ro', isa => 'Int', writer => '_setlen', default => 0);
-has 'writing' => (is => 'ro', isa => 'Bool', writer => '_set_write', default => 1);
+has 'pos'     => (is => 'ro', isa => 'Int', writer => '_setpos', default => 0);
+has 'len'     => (is => 'ro', isa => 'Int', writer => '_setlen', default => 0);
+has 'mode'    => (is => 'rw', default => 'rdwr');
+
+has 'file'         => (is => 'ro', writer => '_setfile');
+has 'fheader'      => (is => 'ro', writer => '_setfheader');
+has 'fheaderlines' => (is => 'ro');
+
+has 'writing' => (is => 'ro', isa => 'Bool',writer => '_setwrite', default=>1);
 
 # Useful for testing, but time consuming.  Not so bad now that all the test
 # suites call put_*  ~30 times with a list instead of per-value ~30,000 times.
@@ -28,14 +55,57 @@ has 'writing' => (is => 'ro', isa => 'Bool', writer => '_set_write', default => 
 #   $pos;
 # };
 
-{
-  use Config;
-  my $mbits = 32;
-  $mbits = 64 if defined $Config{'use64bitint'} && $Config{'use64bitint'} eq 'define';
-  $mbits = 64 if defined $Config{'longsize'} && $Config{'longsize'} >= 8;
+sub BUILD {
+  my $self = shift;
 
-  sub maxbits { $mbits; }
+  # Change mode to canonical form
+  my $mode = $self->mode;
+  my $writing;
+  if    ($mode eq 'read')      { $mode = 'r'; }
+  elsif ($mode eq 'readonly')  { $mode = 'ro'; }
+  elsif ($mode eq 'write')     { $mode = 'w'; }
+  elsif ($mode eq 'writeonly') { $mode = 'wo'; }
+  elsif ($mode eq 'readwrite') { $mode = 'rw'; }
+  elsif ($mode eq 'rdwr')      { $mode = 'rw'; }
+  elsif ($mode eq 'append')    { $mode = 'a'; }
+  die "Unknown mode: $mode" unless $mode =~ /^(?:r|ro|w|wo|rw|a)$/;
+
+  # Set writing based on mode
+  if    ($mode =~ /^ro?$/) { $writing = 0; }
+  elsif ($mode =~ /^wo?$/) { $writing = 1; }
+  elsif ($mode eq 'rw')    { $writing = 1; }
+  elsif ($mode eq 'a')     { $writing = 0; }
+
+  if ($writing) {
+    $self->_setwrite(1);
+    $self->write_open;
+  } else {
+    $self->_setwrite(0);
+    $self->read_open;
+  }
+
+  $self->write_open if $mode eq 'a';
+  # TODO: writeonly doesn't really work
 }
+
+sub DEMOLISH {
+  my $self = shift;
+  $self->write_close if $self->writing;
+}
+
+my $_host_word_size;
+BEGIN {
+  use Config;
+  $_host_word_size =
+   (   (defined $Config{'use64bitint'} && $Config{'use64bitint'} eq 'define')
+    || (defined $Config{'use64bitall'} && $Config{'use64bitall'} eq 'define')
+    || (defined $Config{'longsize'} && $Config{'longsize'} >= 8)
+   )
+   ? 64
+   : 32;
+  no Config;
+}
+use constant maxbits => $_host_word_size;
 
 sub rewind {
   my $self = shift;
@@ -65,10 +135,44 @@ sub erase {
   # Writing state is left unchanged
   # You want an after method to handle the data
 }
+sub read_open {
+  my $self = shift;
+  die "read while stream opened writeonly" if $self->mode eq 'wo';
+  $self->write_close if $self->writing;
+  my $file = $self->file;
+  if (defined $file) {
+    open(my $fp, "<", $file) or die "Cannot open read file $file: $!\n";
+    my $headerlines = $self->fheaderlines;
+    if (defined $headerlines) {
+      # Read in their header
+      my $header = '';
+      while ($headerlines-- > 0) {
+        $header .= <$fp>;
+      }
+      $self->_setfheader($header);
+    }
+    binmode $fp;
+    # Turn off file linking while calling from_raw
+    my $mode = $self->mode;
+    $self->_setfile( undef );
+    $self->mode( 'rw' );
+    my $bits = <$fp>;
+    {
+      local $/;
+      $self->from_raw( <$fp>, $bits );
+    }
+    close $fp;
+    # link us back.
+    $self->_setfile( $file );
+    $self->mode( $mode );
+  }
+  1;
+}
 sub write_open {
   my $self = shift;
+  die "write while stream opened readonly" if $self->mode eq 'ro';
   if (!$self->writing) {
-    $self->_set_write(1);
+    $self->_setwrite(1);
     # pos is now ignored
   }
   1;
@@ -76,8 +180,19 @@ sub write_open {
 sub write_close {
   my $self = shift;
   if ($self->writing) {
-    $self->_set_write(0);
+    $self->_setwrite(0);
     $self->_setpos($self->len);
+
+    my $file = $self->file;
+    if (defined $file) {
+      open(my $fp, ">", $file) or die "Cannot open file $file: $!\n";
+      my $header = $self->fheader;
+      print $fp $header, "\n" if defined $header && length($header) > 0;
+      binmode $fp;
+      print $fp $self->len, "\n";
+      print $fp $self->to_raw;
+      close $fp;
+    }
   }
   1;
 }
@@ -110,8 +225,20 @@ sub put_unary {
 
   foreach my $val (@_) {
     warn "Trying to write large unary value ($val)" if $val > 10_000_000;
-    $self->write(32, 0)  for (1 .. ($val>>5));
-    $self->write(($val & 0x1F)+1, 1);
+
+    # This works for most write implementations, and will be super fast:
+    $self->write($val+1, 1);
+
+    # Alternate safer implementation, much slower for large values:
+    #
+    # if ($val < maxbits) {
+    #   $self->write($val+1, 1);
+    # } else {
+    #   my $nbits  = $val % maxbits;
+    #   my $nwords = ($val-$nbits) / maxbits;
+    #   $self->write(maxbits, 0)  for (1 .. $nwords);
+    #   $self->write($nbits+1, 1);
+    # }
   }
   1;
 }
@@ -139,18 +266,19 @@ sub get_unary {            # You ought to override this.
     #
     # Faster code, looks at 32 bits at a time.  Still comparatively slow.
 
-    my $word = $self->read(32, 'readahead');
+    my $word = $self->read(maxbits, 'readahead');
     last unless defined $word;
     while ($word == 0) {
-      die "read off end of stream" unless $self->skip(32);
-      $val += 32;
-      $word = $self->read(32, 'readahead');
+      die "read off end of stream" unless $self->skip(maxbits);
+      $val += maxbits;
+      $word = $self->read(maxbits, 'readahead');
     }
-    while (($word & 0x80000000) == 0) {
+    while (($word >> (maxbits-1) & 1) == 0) {
       $val++;
       $word <<= 1;
     }
-    $self->skip(($val & 0x1F) + 1);
+    my $nbits = $val % maxbits;
+    $self->skip($nbits + 1);
 
     push @vals, $val;
   }
@@ -164,10 +292,14 @@ sub put_unary1 {
 
   foreach my $val (@_) {
     warn "Trying to write large unary value ($val)" if $val > 10_000_000;
-    my $nwords = $val >> 5;
-    my $nbits = $val & 0x1F;
-    $self->write(32, 0xFFFFFFFF)  for (1 .. $nwords);
-    $self->write($nbits+1, 0xFFFFFFFE);
+    if ($val < 32) {
+      $self->write($val+1, ~0 << 1);
+    } else {
+      my $nbits  = $val % maxbits;
+      my $nwords = ($val-$nbits) / maxbits;
+      $self->write(maxbits, ~0)  for (1 .. $nwords);
+      $self->write($nbits+1, ~0 << 1);
+    }
   }
   1;
 }
@@ -195,18 +327,18 @@ sub get_unary1 {            # You ought to override this.
     #
     # Faster code, looks at 32 bits at a time.  Still comparatively slow.
 
-    my $word = $self->read(32, 'readahead');
+    my $word = $self->read(maxbits, 'readahead');
     last unless defined $word;
-    while ($word == 0xFFFFFFFF) {
-      die "read off end of stream" unless $self->skip(32);
-      $val += 32;
-      $word = $self->read(32, 'readahead');
+    while ($word == ~0) {
+      die "read off end of stream" unless $self->skip(maxbits);
+      $val += maxbits;
+      $word = $self->read(maxbits, 'readahead');
     }
-    while (($word & 0x80000000) != 0) {
+    while (($word >> (maxbits-1) & 1) != 0) {
       $val++;
       $word <<= 1;
     }
-    my $nbits = $val & 0x1F;
+    my $nbits = $val % maxbits;
     $self->skip($nbits + 1);
 
     push @vals, $val;
@@ -219,7 +351,7 @@ sub get_unary1 {            # You ought to override this.
 sub put_binword {
   my $self = shift;
   my $bits = shift;
-  die "invalid parameters" if ($bits < 0) || ($bits > $self->maxbits);
+  die "invalid parameters" if ($bits < 0) || ($bits > maxbits);
 
   foreach my $val (@_) {
     $self->write($bits, $val);
@@ -230,7 +362,7 @@ sub get_binword {
   my $self = shift;
   die "get while writing" if $self->writing;
   my $bits = shift;
-  die "invalid parameters" if ($bits < 0) || ($bits > $self->maxbits);
+  die "invalid parameters" if ($bits < 0) || ($bits > maxbits);
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -414,7 +546,7 @@ sub _dec_to_bin {
   }
 }
 
-no Mouse;
+no Mouse::Role;
 1;
 
 

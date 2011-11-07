@@ -3,10 +3,23 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::StartStop::AUTHORITY = 'cpan:DANAJ';
+  $Data::BitStream::Code::StartStop::VERSION   = '0.01';
 }
-BEGIN {
-  $Data::BitStream::Code::StartStop::VERSION = '0.01';
-}
+
+our $CODEINFO = [
+    { package   => __PACKAGE__,
+      name      => 'StartStop',
+      universal => 1,
+      params    => 1,
+      encodesub => sub {shift->put_startstop([split('-',shift)], @_)},
+      decodesub => sub {shift->get_startstop([split('-',shift)], @_)}, },
+    { package   => __PACKAGE__,
+      name      => 'StartStepStop',
+      universal => 1,
+      params    => 1,
+      encodesub => sub {shift->put_startstepstop([split('-',shift)], @_)},
+      decodesub => sub {shift->get_startstepstop([split('-',shift)], @_)}, },
+                ];
 
 use Mouse::Role;
 requires qw(maxbits read skip write put_unary put_binword put_rice);
@@ -164,7 +177,7 @@ sub get_startstepstop {
 
   return $self->get_startstop( [@pmap], @_ );
 }
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Start/Stop and Start-Step-Stop codes

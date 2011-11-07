@@ -6,9 +6,12 @@ TODO
 lib/Data/BitStream.pm
 lib/Data/BitStream/Base.pm
 lib/Data/BitStream/BitVec.pm
+lib/Data/BitStream/BLVec.pm
+lib/Data/BitStream/MinimalVec.pm
 lib/Data/BitStream/String.pm
 lib/Data/BitStream/Vec.pm
 lib/Data/BitStream/WordVec.pm
+lib/Data/BitStream/Code/ARice.pm
 lib/Data/BitStream/Code/Baer.pm
 lib/Data/BitStream/Code/BoldiVigna.pm
 lib/Data/BitStream/Code/Delta.pm
@@ -41,17 +44,21 @@ t/exporting.t
 t/interleave.t
 t/mixed.t
 t/multiget.t
+t/put_stream.t
 t/put_string.t
 t/range.t
 t/raw_size.t
+t/text.t
 t/lib/BitStreamTest.pm
-examples/3d-gamma.raw
+examples/3d-unary.raw
 examples/bench-codes.pl
 examples/bench-copy.pl
 examples/code-table.pl
 examples/compression-code.pl
+examples/imcomp.pl
 examples/integercoding.pl
 examples/rand-geo.pl
 examples/test-ic.pl
 examples/tvlc-newcode.pl
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

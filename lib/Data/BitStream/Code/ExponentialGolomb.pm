@@ -3,10 +3,15 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::ExponentialGolomb::AUTHORITY = 'cpan:DANAJ';
+  $Data::BitStream::Code::ExponentialGolomb::VERSION   = '0.03';
 }
-BEGIN {
-  $Data::BitStream::Code::ExponentialGolomb::VERSION = '0.02';
-}
+
+our $CODEINFO = { package   => __PACKAGE__,
+                  name      => 'ExpGolomb',
+                  universal => 1,
+                  params    => 1,
+                  encodesub => sub {shift->put_expgolomb(@_)},
+                  decodesub => sub {shift->get_expgolomb(@_)}, };
 
 use Mouse::Role;
 requires qw(put_rice put_gamma get_rice get_gamma);
@@ -30,7 +35,7 @@ sub get_expgolomb {
   $self->get_rice( sub { shift->get_gamma(@_); }, @_ );
 }
 
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Exponential-Golomb codes
@@ -43,7 +48,7 @@ Data::BitStream::Code::ExponentialGolomb - A Role implementing Exponential-Golom
 
 =head1 VERSION
 
-version 0.02
+version 0.03
 
 =head1 DESCRIPTION
 

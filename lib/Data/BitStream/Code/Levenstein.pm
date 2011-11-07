@@ -3,10 +3,16 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Levenstein::AUTHORITY = 'cpan:DANAJ';
+  $Data::BitStream::Code::Levenstein::VERSION   = '0.01';
 }
-BEGIN {
-  $Data::BitStream::Code::Levenstein::VERSION = '0.01';
-}
+
+our $CODEINFO = { package   => __PACKAGE__,
+                  name      => 'Levenstein',
+                  aliases   => ['Levenshtein'],
+                  universal => 1,
+                  params    => 0,
+                  encodesub => sub {shift->put_levenstein(@_)},
+                  decodesub => sub {shift->get_levenstein(@_)}, };
 
 sub _floorlog2_lev {
   my $d = shift;
@@ -106,7 +112,7 @@ sub get_levenstein {
   }
   wantarray ? @vals : $vals[-1];
 }
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Levenstein codes

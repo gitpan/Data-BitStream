@@ -4,8 +4,9 @@ use warnings;
 
 $| = 1;  # fast pipes
 
-# Load up the integercoding.pl routines, ignore the program
-eval {require 'integercoding.pl'; };
+# Load up the integercoding.pl routines directly from that file
+require 'integercoding.pl';
+IntegerCoding->import;
 
 use FindBin;  use lib "$FindBin::Bin/../lib";
 use Data::BitStream;
@@ -55,7 +56,7 @@ sub test_unary {
   $stream->from_string($s2);
   my $v2 = $stream->get_unary();
   die "encode mismatch for $n" unless $s1 eq $s2;
-  die "decode mismatch for $n" unless $v1 eq $v2 and $v1 eq $n;
+  die "decode mismatch for $n" unless $v1 == $v2 && $v1 == $n;
   1;
 }
 sub test_gamma {
@@ -68,7 +69,7 @@ sub test_gamma {
   $stream->from_string($s2);
   my $v2 = $stream->get_gamma() + 1;
   die "encode mismatch for $n" unless $s1 eq $s2;
-  die "decode mismatch for $n" unless $v1 eq $v2 and $v1 eq $n;
+  die "decode mismatch for $n" unless $v1 == $v2 && $v1 == $n;
   1;
 }
 sub test_delta {
@@ -81,7 +82,7 @@ sub test_delta {
   $stream->from_string($s2);
   my $v2 = $stream->get_delta() + 1;
   die "encode mismatch for $n" unless $s1 eq $s2;
-  die "decode mismatch for $n" unless $v1 eq $v2 and $v1 eq $n;
+  die "decode mismatch for $n" unless $v1 == $v2 && $v1 == $n;
   1;
 }
 sub test_omega {
@@ -94,7 +95,7 @@ sub test_omega {
   $stream->from_string($s2);
   my $v2 = $stream->get_omega() + 1;
   die "encode mismatch for $n" unless $s1 eq $s2;
-  die "decode mismatch for $n" unless $v1 eq $v2 and $v1 eq $n;
+  die "decode mismatch for $n" unless $v1 == $v2 && $v1 == $n;
   1;
 }
 sub test_fib {
@@ -107,6 +108,6 @@ sub test_fib {
   $stream->from_string($s2);
   my $v2 = $stream->get_fib() + 1;
   die "encode mismatch for $n" unless $s1 eq $s2;
-  die "decode mismatch for $n" unless $v1 eq $v2 and $v1 eq $n;
+  die "decode mismatch for $n" unless $v1 == $v2 && $v1 == $n;
   1;
 }

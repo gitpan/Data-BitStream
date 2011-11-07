@@ -3,10 +3,15 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Omega::AUTHORITY = 'cpan:DANAJ';
+  $Data::BitStream::Code::Omega::VERSION   = '0.01';
 }
-BEGIN {
-  $Data::BitStream::Code::Omega::VERSION = '0.01';
-}
+
+our $CODEINFO = { package   => __PACKAGE__,
+                  name      => 'Omega',
+                  universal => 1,
+                  params    => 0,
+                  encodesub => sub {shift->put_omega(@_)},
+                  decodesub => sub {shift->get_omega(@_)}, };
 
 use Mouse::Role;
 requires 'read', 'write', 'skip';
@@ -126,7 +131,7 @@ sub get_omega {
   }
   wantarray ? @vals : $vals[-1];
 }
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Elias Omega codes

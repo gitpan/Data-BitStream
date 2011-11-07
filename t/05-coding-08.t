@@ -9,30 +9,22 @@ use BitStreamTest;
 my @implementations = impl_list;
 my @encodings       = encoding_list;
 
-plan tests => scalar @encodings;
+plan tests => scalar @encodings * scalar @implementations;;
 
-foreach my $encoding (@encodings) {
-  subtest "$encoding" => sub { test_encoding($encoding); };
-}
-done_testing();
+my @data = (0 .. 257);
 
+foreach my $type (@implementations) {
 
-sub test_encoding {
-  my $encoding = shift;
+  my $asize = 129;
+  if ($type eq 'minimalvec') { $asize =   65; }
+  elsif ($type eq 'xs')      { $asize = 1025; }
+  my @data = (0 .. $asize);
+  push @data, reverse @data;
 
-  plan tests => 2 * scalar @implementations;
-
-  foreach my $type (@implementations) {
-    my $success = 1;
-    my @data = (0 .. 257);
-    push @data, reverse @data;
+  foreach my $encoding (@encodings) {
     my $stream = stream_encode_array($type, $encoding, @data);
     BAIL_OUT("No stream of type $type") unless defined $stream;
     my @v = stream_decode_array($encoding, $stream);
-    cmp_ok(scalar @v, '==', scalar @data, "$type: $encoding size");
-    foreach my $i (0 .. $#data) {
-      $success = 0 if $v[$i] != $data[$i];
-    }
-    ok($success, "$encoding store ascending/descending array using $type");
+    is_deeply( \@v, \@data, "$type: $encoding store ascending/descending array");
   }
 }

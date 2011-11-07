@@ -3,10 +3,15 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Delta::AUTHORITY = 'cpan:DANAJ';
+  $Data::BitStream::Code::Delta::VERSION   = '0.01';
 }
-BEGIN {
-  $Data::BitStream::Code::Delta::VERSION = '0.01';
-}
+
+our $CODEINFO = { package   => __PACKAGE__,
+                  name      => 'Delta',
+                  universal => 1,
+                  params    => 0,
+                  encodesub => sub {shift->put_delta(@_)},
+                  decodesub => sub {shift->get_delta(@_)}, };
 
 use Mouse::Role;
 requires qw(maxbits read write put_gamma get_gamma);
@@ -57,7 +62,7 @@ sub get_delta {
   }
   wantarray ? @vals : $vals[-1];
 }
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Elias Delta codes

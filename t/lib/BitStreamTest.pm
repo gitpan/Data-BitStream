@@ -9,6 +9,7 @@ use warnings;
 
 use base qw(Exporter);
 our @EXPORT = qw(
+  full_testing
   new_stream
   encoding_list
   is_universal
@@ -20,6 +21,10 @@ our @EXPORT = qw(
   sub_for_string
 );
 
+# Skip some tests unless this is 1
+sub full_testing   { 0; }
+
+
 # The string implementation must be available and working.
 use Data::BitStream::String;
 
@@ -29,37 +34,50 @@ my %stream_constructors = (
 
 # Other implementations may or may not be available.
 # If they're not, we just won't test them.
-if (eval {require Data::BitStream::Vec}) {
+
+# Vec -- deprecated to WordVec
+if (full_testing && eval {require Data::BitStream::Vec}) {
   $stream_constructors{'vector'} = sub { return Data::BitStream::Vec->new(); };
 }
-if (eval {require Data::BitStream::BitVec}) {
+# BitVec -- no faster than WordVec, and cpan tests indicate Bit::Vector is
+# failing for us on some machines.
+if (full_testing && eval {require Data::BitStream::BitVec}) {
   $stream_constructors{'bitvector'} = sub { return Data::BitStream::BitVec->new(); };
 }
+
+# MinimalVec should let us test all of the functionality in Base.pm
+if (eval {require Data::BitStream::MinimalVec}) {
+  $stream_constructors{'minimalvec'} = sub { return Data::BitStream::MinimalVec->new(); };
+}
+# WordVec is the fast Pure Perl implementation
 if (eval {require Data::BitStream::WordVec}) {
   $stream_constructors{'wordvec'} = sub {return Data::BitStream::WordVec->new();};
 }
+# BLVec wraps Data:BitStream:XS if it is installed
+if (eval {require Data::BitStream::BLVec}) {
+  $stream_constructors{'blvec'} = sub {return Data::BitStream::BLVec->new();};
+}
+# Direct XS -- currently none of the testing uses features this can't handle.
+# The big item would be any MOP (meta object protocol) handling, since the XS
+# class isn't Moose/Mouse/Moo.
+if (eval {require Data::BitStream::XS}) {
+  $stream_constructors{'xs'} = sub {return Data::BitStream::XS->new();};
+}
 
 sub impl_list {
-  my $sorder = 'default string wordvec vector bitvector';
+  my $sorder = 'default string wordvec blvec vector bitvector xs';
   my @ilist = sort {
                      index($sorder,$a) <=> index($sorder,$b);
                    } keys %stream_constructors;
   @ilist;
 }
   
-use Data::BitStream::Code::Escape;
-use Data::BitStream::Code::BoldiVigna;
-use Data::BitStream::Code::Baer;
-
 sub new_stream {
   my $type = lc shift;
   $type =~ s/[^a-z]//g;
   my $constructor = $stream_constructors{$type};
   die "Unknown stream type: $type" unless defined $constructor;
   my $stream = $constructor->();
-  Data::BitStream::Code::Escape->meta->apply($stream);
-  Data::BitStream::Code::BoldiVigna->meta->apply($stream);
-  Data::BitStream::Code::Baer->meta->apply($stream);
   return $stream;
 }
 
@@ -67,7 +85,7 @@ my $maxbits = Data::BitStream::String::maxbits();
 
 sub is_universal {
   my $enc = lc shift;
-  return 1 if $enc =~ /^(gamma|delta|omega|evenrodeh|fib|fibc2|escape|gg|eg|lev|bvzeta|baer)\b/;
+  return 1 if $enc =~ /^(gamma|delta|omega|evenrodeh|fib|fibc2|gg|eg|lev|bvzeta|baer|arice)\b/;
   return 1 if $enc =~ /^(delta|omega|fib|fibc2|er)gol\b/;
   return 1 if $enc =~ /^binword\($maxbits\)$/;
   return 0;
@@ -75,15 +93,15 @@ sub is_universal {
 
 sub encoding_list {
   my @e = qw|
-              Gamma Delta Omega Fib GG(3) GG(128) EG(5)
+              Unary Unary1 Gamma Delta Omega Fib
               EvenRodeh Levenstein
-              SSS(3-3-99) SS(1-0-1-0-2-12-99)
-              DeltaGol(21) OmegaGol(21) FibGol(21) ERGol(890)
-              Unary
               Golomb(10) Golomb(16) Golomb(14000)
               Rice(2) Rice(9)
-              BVZeta(2)
-              Baer(0) Baer(-2) Baer(2)
+              GG(3) GG(128) EG(5)
+              DeltaGol(21) OmegaGol(21) FibGol(21) ERGol(890)
+              BVZeta(2) Baer(0) Baer(-2) Baer(2)
+              SSS(3-3-99) SS(1-0-1-0-2-12-99)
+              ARice(9)
             |;
   unshift @e, "Binword($maxbits)";
   @e; 
@@ -116,8 +134,10 @@ my %esubs = (
   'eg'     => sub { my $stream=shift; my $p=shift; $stream->put_expgolomb($p,@_) },
   'bvzeta' => sub { my $stream=shift; my $p=shift; $stream->put_boldivigna($p,@_) },
   'baer'   => sub { my $stream=shift; my $p=shift; $stream->put_baer($p,@_) },
+  'arice'  => sub { my $stream=shift; my $p=shift; $stream->put_arice($p,@_) },
   # Non-Universal
   'unary'  => sub { my $stream=shift; my $p=shift; $stream->put_unary(@_) },
+  'unary1' => sub { my $stream=shift; my $p=shift; $stream->put_unary1(@_) },
   'golomb' => sub { my $stream=shift; my $p=shift; $stream->put_golomb($p,@_) },
   'rice'   => sub { my $stream=shift; my $p=shift; $stream->put_rice($p,@_) },
   'sss'    => sub { my $stream=shift; my $p=shift; $stream->put_startstepstop([split('-',$p)],@_) },
@@ -142,8 +162,10 @@ my %dsubs = (
   'eg'     => sub { my $stream=shift; my $p=shift; $stream->get_expgolomb($p,@_) },
   'bvzeta' => sub { my $stream=shift; my $p=shift; $stream->get_boldivigna($p,@_) },
   'baer'   => sub { my $stream=shift; my $p=shift; $stream->get_baer($p,@_) },
+  'arice'  => sub { my $stream=shift; my $p=shift; $stream->get_arice($p,@_) },
   # Non-Universal
   'unary'  => sub { my $stream=shift; my $p=shift; $stream->get_unary(@_) },
+  'unary1' => sub { my $stream=shift; my $p=shift; $stream->get_unary1(@_) },
   'golomb' => sub { my $stream=shift; my $p=shift; $stream->get_golomb($p,@_) },
   'rice'   => sub { my $stream=shift; my $p=shift; $stream->get_rice($p,@_) },
   'sss'    => sub { my $stream=shift; my $p=shift; $stream->get_startstepstop([split('-',$p)],@_) },

@@ -3,10 +3,15 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Escape::AUTHORITY = 'cpan:DANAJ';
-}
-BEGIN {
   $Data::BitStream::Code::Escape::VERSION = '0.01';
 }
+
+our $CODEINFO = { package   => __PACKAGE__,
+                  name      => 'Escape',
+                  universal => 1,
+                  params    => 1,
+                  encodesub => sub {shift->put_escape([split('-',shift)], @_)},
+                  decodesub => sub {shift->get_escape([split('-',shift)], @_)}, };
 
 use Mouse::Role;
 requires qw(read write maxbits);
@@ -28,12 +33,9 @@ sub put_escape {
   my $p = shift;
   die "p must be an array" unless (ref $p eq 'ARRAY') && scalar @$p >= 1;
 
-  my @parray = @$p;
   my $maxbits = $self->maxbits;
-  map {
-        $_ = $maxbits if (!defined $_) || ($_ > $maxbits);
-        die "invalid parameters" if $_ <= 0;
-      } @parray;
+  my @parray = map { (defined $_ && $_ <= $maxbits) ? $_ : $maxbits } @$p;
+  foreach my $p (@parray) {  die "invalid parameters" if $p <= 0;  }
 
   foreach my $val (@_) {
     my @bitarray = @parray;
@@ -68,12 +70,9 @@ sub get_escape {
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
   elsif ($count == 0)     { return;      }
 
-  my @parray = @$p;
   my $maxbits = $self->maxbits;
-  map {
-        $_ = $maxbits if (!defined $_) || ($_ > $maxbits);
-        die "invalid parameters" if $_ <= 0;
-      } @parray;
+  my @parray = map { (defined $_ && $_ <= $maxbits) ? $_ : $maxbits } @$p;
+  foreach my $p (@parray) {  die "invalid parameters" if $p <= 0;  }
 
   my @vals;
   while ($count-- > 0) {
@@ -93,7 +92,7 @@ sub get_escape {
   }
   wantarray ? @vals : $vals[-1];
 }
-no Mouse;
+no Mouse::Role;
 1;
 
 # ABSTRACT: A Role implementing Escape codes

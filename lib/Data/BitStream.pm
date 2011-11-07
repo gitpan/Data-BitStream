@@ -1,48 +1,171 @@
 package Data::BitStream;
-# I have tested with 5.8.9 and later.
-# I was unable to install Mouse on 5.8.0.
+# I have tested with 5.8.9 through 5.15.3.
+# I was unable to install Mouse on 5.8.0 so could not test with that.
 use strict;
 use warnings;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
-require Exporter;
+# Since we're using Moose/Mouse, things get rather messed up if we try to
+# inherit from Exporter.  Really all we want is the ability to let people
+# use a couple convenience functions, so just grab the import method.
+use Exporter qw(import);
+our @EXPORT_OK = qw( code_is_supported code_is_universal );
 
-our @ISA = qw(Exporter);
 
-# Items to export into callers namespace by default. Note: do not export
-# names by default without a very good reason. Use EXPORT_OK instead.
-# Do not simply export all your public functions/methods/constants.
+# Our class methods to support referencing codes by text names.
+my %codeinfo;
 
-# This allows declaration	use Data::BitStream ':all';
-# If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
-# will save memory.
-our %EXPORT_TAGS = ( 'all' => [ qw(
-	
-) ] );
+sub add_code {
+  my $rinfo = shift;
+  die "add_code needs a hash ref" unless defined $rinfo && ref $rinfo eq 'HASH';
+  foreach my $p (qw(package name universal params encodesub decodesub)) {
+    die "invalid registration: missing $p" unless defined $$rinfo{$p};
+  }
+  my $name = lc $$rinfo{'name'};
+  if (defined $codeinfo{$name}) {
+    return 1 if $codeinfo{$name}{'package'} eq $$rinfo{'package'};
+    die "module $$rinfo{'package'} trying to reuse code name '$name' already in use by $codeinfo{$name}{'package'}";
+  }
+  $codeinfo{$name} = $rinfo;
+  1;
+}
 
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+sub find_code {
+  my $code = lc shift;
 
-our @EXPORT = qw(
-	
-);
+  return $codeinfo{$code} if defined $codeinfo{$code};
+
+  # Load codes from base
+  if (   defined $Data::BitStream::Base::CODEINFO
+      && ref $Data::BitStream::Base::CODEINFO eq 'ARRAY') {
+    foreach my $r (@{$Data::BitStream::Base::CODEINFO}) {
+      next unless ref $r eq 'HASH';
+      add_code($r);
+    }
+  }
+
+  # Load info for all code modules that have been included
+  foreach my $module (keys %Data::BitStream::Code::) {
+    # module is 'Gamma::'  mname is 'Gamma'
+    my ($mname) = $module =~ /(.+)::$/;
+    next unless defined $mname;
+    # Load the CODEINFO variable, skip if it isn't found
+    my $rinfo;
+    {
+      my $pname = 'Data::BitStream::Code::' . $module;
+      no strict 'refs';
+      $rinfo = ${$pname}{'CODEINFO'};
+      next unless defined $rinfo;
+      next unless $rinfo =~ s/^\*//;
+      $rinfo = ${$rinfo};
+    }
+    next unless defined $rinfo;
+    if (ref $rinfo eq 'HASH') {
+      add_code($rinfo);
+    } elsif (ref $rinfo eq 'ARRAY') {
+      foreach my $r (@{$rinfo}) {
+        next unless ref $r eq 'HASH';
+        add_code($r);
+      }
+    }
+  }
+
+  $codeinfo{$code};
+}
+
+sub code_is_supported {
+  my $code = lc shift;
+  my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
+  return defined find_code($code);
+}
+
+sub code_is_universal {
+  my $code = lc shift;
+  my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
+  my $inforef = find_code($code);
+  if (!defined $inforef) {
+    warn "code_is_universal: unknown code '$code'\n";
+    return 0;
+  }
+  return $inforef->{'universal'};
+}
 
 
 # Pick one implementation as the default.
 #
-# String is usually fastest, but more memory than the others (1 byte per bit).
+# BLVec uses the Data::BitStream::XS class, and is 50-100x faster than the
+# others for most codes.
 #
-# WordVec is space and time efficient, hence is used as the default.
+# WordVec is the preferred Pure Perl implementation, being both space and time
+# efficient.
+#
+# String is simple and surprisingly fast, but uses more memory (1 byte per bit).
 #
 # Vec is deprecated.
 #
-# BitVec (using Bit::Vector) can be faster or slower than WordVec depending
-# on which methods are used.  It is possible that a different implementation
-# would result in much faster overall speed.
+# MinimalVec is for example only.
+#
+# BitVec uses Bit::Vector to try to obtain better performance.  While a few
+# operations (e.g. get_unary) can be fast, in general it is as slow or slower
+# than the WordVec implementation.  The main issue is that Bit::Vector uses a
+# little-endian representation which does not match what we want.
+#
+# bench-codes with many codes, sum:
+#
+#   BLVec       4829 ns encode    11102 ns decode   71   x
+#   String    403470 ns encode   494878 ns decode    1.3 x
+#   WordVec   457533 ns encode   676737 ns decode    1.0
+#   BitVec    492701 ns encode   666711 ns decode    0.98x
+#   Vec       549342 ns encode   927764 ns decode    0.77x
+#   MinmlVec  554690 ns encode  8252307 ns decode    0.13x
+#
+# A 32-bit HP 9000/785 gave similar results though ~15x slower overall.
 
 use Data::BitStream::WordVec;
 use Mouse;
-extends 'Data::BitStream::WordVec';
+if (eval {require Data::BitStream::BLVec}) {
+  extends 'Data::BitStream::BLVec';
+} else {
+  extends 'Data::BitStream::WordVec';
+}
+
+# get and put methods for referencing codes by text names
+sub code_put {
+  my $self = shift;
+  my $code = lc shift;
+  my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
+  my $inforef = find_code($code);
+  die "Unknown code $code" unless defined $inforef;
+  my $sub = $inforef->{'encodesub'};
+  die "No encoding sub for code $code!" unless defined $sub;
+  if ($inforef->{'params'}) {
+    die "Code $code needs a parameter" unless defined $param;
+    return $sub->($self, $param, @_);
+  } else {
+    die "Code $code does not have parameters" if defined $param;
+    return $sub->($self, @_);
+  }
+}
+
+sub code_get {
+  my $self = shift;
+  my $code = lc shift;
+  my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
+  my $inforef = find_code($code);
+  die "Unknown code $code" unless defined $inforef;
+  my $sub = $inforef->{'decodesub'};
+  die "No decoding sub for code $code!" unless defined $sub;
+  if ($inforef->{'params'}) {
+    die "Code $code needs a parameter" unless defined $param;
+    return $sub->($self, $param, @_);
+  } else {
+    die "Code $code does not have parameters" if defined $param;
+    return $sub->($self, @_);
+  }
+}
+
+__PACKAGE__->meta->make_immutable;
 no Mouse;
 
 1;
@@ -106,8 +229,9 @@ using XS for internals may resolve some performance concerns.
   my $stream = Data::BitStream->new;
   # Loop over the data: characters, pixels, table entries, etc.
   foreach my $v (@values) {
-    # predict the value at this pixel using your subroutine.
-    my $p = predict();
+    # predict the current value using your subroutine.  This routine
+    # will use one or more previous values to estimate the current one.
+    my $p = predict($v);
     # determine the signed difference.
     my $diff = $v - $p;
     # Turn this into an absolute difference suitable for coding.
