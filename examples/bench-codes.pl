@@ -46,7 +46,7 @@ my @encodings;
   StartStepStop(3-2-20)
   BinWord(20)
 |;
-#@encodings = qw|Unary Gamma Delta Omega Fibonacci|;
+@encodings = qw|Unary Gamma Delta Omega Fibonacci|;
 
 my $list_n = 2048;
 my @list_small;

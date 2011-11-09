@@ -65,7 +65,7 @@ sub time_list {
   my $encoding = shift;
   my @list = @_;
   my $s1 = [gettimeofday];
-  my $stream = stream_encode_array('blvec', $encoding, @list);
+  my $stream = stream_encode_array('wordvec', $encoding, @list);
   die "Stream ($encoding) construction failure" unless defined $stream;
   my $e1 = int(tv_interval($s1)*1_000_000);
   my $len = $stream->len;

@@ -119,7 +119,7 @@ sub skip {
   my $skip = shift;
   my $pos = $self->pos;
   my $len = $self->len;
-  return 0 if ($pos + $skip) > $len;
+  die "skip off stream" if ($pos + $skip) > $len;
   $self->_setpos($pos + $skip);
   1;
 }
@@ -226,10 +226,11 @@ sub put_unary {
   foreach my $val (@_) {
     warn "Trying to write large unary value ($val)" if $val > 10_000_000;
 
-    # This works for most write implementations, and will be super fast:
+    # Since the write routine is allowed to take any number of bits when
+    # writing 0 and 1, this works, and is very fast.
     $self->write($val+1, 1);
 
-    # Alternate safer implementation, much slower for large values:
+    # Alternate implementation, much slower for large values:
     #
     # if ($val < maxbits) {
     #   $self->write($val+1, 1);
@@ -244,7 +245,7 @@ sub put_unary {
 }
 sub get_unary {            # You ought to override this.
   my $self = shift;
-  die "get while writing" if $self->writing;
+  die "read while writing" if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -269,7 +270,7 @@ sub get_unary {            # You ought to override this.
     my $word = $self->read(maxbits, 'readahead');
     last unless defined $word;
     while ($word == 0) {
-      die "read off end of stream" unless $self->skip(maxbits);
+      die "read off stream" unless $self->skip(maxbits);
       $val += maxbits;
       $word = $self->read(maxbits, 'readahead');
     }
@@ -292,7 +293,7 @@ sub put_unary1 {
 
   foreach my $val (@_) {
     warn "Trying to write large unary value ($val)" if $val > 10_000_000;
-    if ($val < 32) {
+    if ($val < maxbits) {
       $self->write($val+1, ~0 << 1);
     } else {
       my $nbits  = $val % maxbits;
@@ -305,7 +306,7 @@ sub put_unary1 {
 }
 sub get_unary1 {            # You ought to override this.
   my $self = shift;
-  die "get while writing" if $self->writing;
+  die "read while writing" if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -351,7 +352,7 @@ sub get_unary1 {            # You ought to override this.
 sub put_binword {
   my $self = shift;
   my $bits = shift;
-  die "invalid parameters" if ($bits < 0) || ($bits > maxbits);
+  die "invalid parameters" if ($bits <= 0) || ($bits > maxbits);
 
   foreach my $val (@_) {
     $self->write($bits, $val);
@@ -360,9 +361,9 @@ sub put_binword {
 }
 sub get_binword {
   my $self = shift;
-  die "get while writing" if $self->writing;
+  die "read while writing" if $self->writing;
   my $bits = shift;
-  die "invalid parameters" if ($bits < 0) || ($bits > maxbits);
+  die "invalid parameters" if ($bits <= 0) || ($bits > maxbits);
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -381,7 +382,7 @@ sub get_binword {
 # Write one or more text binary strings (e.g. '10010')
 sub put_string {
   my $self = shift;
-  die "put while reading" unless $self->writing;
+  die "write while reading" unless $self->writing;
 
   foreach my $str (@_) {
     next unless defined $str;
@@ -405,8 +406,8 @@ sub put_string {
 sub read_string {
   my $self = shift;
   my $bits = shift;
-  die "Invalid bits" unless defined $bits && $bits >= 0;
-  die "Short read" unless $bits <= ($self->len - $self->pos);
+  die "invalid bits: $bits" unless defined $bits && $bits >= 0;
+  die "short read" unless $bits <= ($self->len - $self->pos);
   my $str = '';
   while ($bits >= 32) {
     $str .= unpack("B32", pack("N", $self->read(32)));
@@ -618,7 +619,7 @@ the C<bits> argument to C<read> and C<write>.  This will be either 32 or 64.
 
 =head2 OBJECT METHODS (I<reading>)
 
-These methods are only value while the stream is in reading state.
+These methods are only valid while the stream is in reading state.
 
 =over 4
 
@@ -674,17 +675,17 @@ as '0011011'.
 
 =head2 OBJECT METHODS (I<writing>)
 
-These methods are only value while the stream is in writing state.
+These methods are only valid while the stream is in writing state.
 
 =over 4
 
 =item B< write($bits, $value) >
 
 Writes C<$value> to the stream using C<$bits> bits.  
-C<$bits> must be between C<1> and C<maxbits>.
+C<$bits> must be between C<1> and C<maxbits>, unless C<value> is 0 or 1, in
+which case C<bits> may be larger than C<maxbits>.
 
-The length is increased by C<$bits> bits.
-
+The stream length will be increased by C<$bits> bits.
 Regardless of the contents of C<$value>, exactly C<$bits> bits will be used.
 If C<$value> has more non-zero bits than C<$bits>, the lower bits are written.
 In other words, C<$value> will be masked before writing.
