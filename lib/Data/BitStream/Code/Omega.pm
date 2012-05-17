@@ -31,11 +31,22 @@ sub _base_of { my $d = shift; my $base = 0; $base++ while ($d >>= 1); $base; }
 
 sub put_omega {
   my $self = shift;
+  $self->error_stream_mode('write') unless $self->writing;
+  my $maxval = $self->maxval;
+  my $maxbits = $self->maxbits;
 
   foreach my $v (@_) {
     my $val = $v;
-    die "Value must be >= 0" unless $val >= 0;
-    # Need to figure out a way to get the decoder to output 0 when we get ~0
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
+    if ($val == $maxval) {         # write special code for maxval
+      if ($maxbits > 32) {
+        $self->write(13, 0x1681);  # 1 0 1 10 1 000000 1
+      } else {
+        $self->write(12, 0x0AC1);  # 1 0 1 01 1 00000 1
+      }
+      next;
+    }
+
     $val++;
 
     # Simpler code, prepending each group to a list.
@@ -79,56 +90,67 @@ sub put_omega {
 
 sub get_omega {
   my $self = shift;
+  $self->error_stream_mode('read') if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
   elsif ($count == 0)     { return;      }
 
   my @vals;
+  my $maxbits = $self->maxbits;
+  $self->code_pos_start('Omega');
   while ($count-- > 0) {
-    my $val;
-    my $first_bit;
+    $self->code_pos_set;
+    my $val = 1;
+    my $first_bit = 1;
+
+    # Simple code:
+    #  while ($first_bit = $self->read(1)) {
+    #    if ($val == $maxbits) { $val = 0; last; }
+    #    $val = (1 << $val) | $self->read($val);
+    #  }
+
     # Speedup reading the first couple sets of codes.  30-80% faster overall.
-    if (1) {  # TODO fix for array
-      my $prefix = $self->read(7, 'readahead');
-      last unless defined $prefix;
-      $val = 1;
-      $prefix <<= 1;
-      if (($prefix & 0x80) == 0) {
-        $self->skip(1);
-        push @vals, 0;
+    my $prefix = $self->read(7, 'readahead');
+    last unless defined $prefix;
+    $prefix <<= 1;
+    if (($prefix & 0x80) == 0) {
+      $self->skip(1);
+      push @vals, 0;
+      next;
+    } elsif (($prefix & 0x20) == 0) {
+      $self->skip(3);
+      push @vals, 1 + (($prefix & 0x40) != 0);
+      next;
+    } elsif ($prefix & 0x40) {                # read 4 more bits
+      $val = ($prefix >> 2) & 0x0F;
+      $self->skip(7);
+      if (($prefix & 0x02) == 0) {
+        push @vals, $val-1;
         next;
-      } elsif (($prefix & 0x20) == 0) {
-        $self->skip(3);
-        push @vals, 1 + (($prefix & 0x40) != 0);
-        next;
-      } elsif ($prefix & 0x40) {                # read 4 more bits
-        $val = ($prefix >> 2) & 0x0F;
-        $self->skip(7);
-        if (($prefix & 0x02) == 0) {
-          push @vals, $val-1;
-          next;
-        }
-      } else {                             # read 3 more bits
-        $val = ($prefix >> 3) & 0x07;
-        $self->skip(6);
-        if (($prefix & 0x04) == 0) {
-          push @vals, $val-1;
-          next;
-        }
       }
-      do {
-         $val = (1 << $val) | $self->read($val);
-      } while ($first_bit = $self->read(1));
-    } else {
-      $val = 1;
-      while ($first_bit = $self->read(1)) {
-        $val = (1 << $val) | $self->read($val);
+    } else {                             # read 3 more bits
+      $val = ($prefix >> 3) & 0x07;
+      $self->skip(6);
+      if (($prefix & 0x04) == 0) {
+        push @vals, $val-1;
+        next;
       }
     }
-    last unless defined $first_bit;
-    push @vals, ($val == 0) ? ~0 : $val-1;
+    do {
+      if ($val == $maxbits) {
+        push @vals, $self->maxval;
+        next;
+      }
+      $self->error_code('overflow') if $val > $maxbits;
+      my $next = $self->read($val);
+      $self->error_off_stream unless defined $next;
+      $val = (1 << $val) | $next;
+    } while ($first_bit = $self->read(1));
+    $self->error_off_stream unless defined $first_bit;
+    push @vals, $val-1;
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 no Mouse::Role;

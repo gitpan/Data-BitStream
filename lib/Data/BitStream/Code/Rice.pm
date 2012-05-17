@@ -18,18 +18,14 @@ requires qw(read write put_unary get_unary);
 
 sub put_rice {
   my $self = shift;
-  my $sub;
+  my $sub = shift if ref $_[0] eq 'CODE';  ## no critic
   my $k = shift;
-  if (ref $k eq 'CODE') {   # Check for sub as first parameter
-    $sub = $k;
-    $k = shift;
-  }
 
-  die "k must be >= 0" unless $k >= 0;
+  $self->error_code('param', 'k must be >= 0') unless $k >= 0;
   return( (defined $sub) ? $sub->($self, @_) : $self->put_unary(@_) ) if $k==0;
 
   foreach my $val (@_) {
-    die "Value must be >= 0" unless $val >= 0;
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
     my $q = $val >> $k;
     my $r = $val - ($q << $k);
     (defined $sub)  ?  $sub->($self, $q)  :  $self->put_unary($q);
@@ -39,14 +35,10 @@ sub put_rice {
 }
 sub get_rice {
   my $self = shift;
-  my $sub;
+  my $sub = shift if ref $_[0] eq 'CODE';  ## no critic  ## no critic
   my $k = shift;
-  if (ref $k eq 'CODE') {   # Check for sub as first parameter
-    $sub = $k;
-    $k = shift;
-  }
 
-  die "k must be >= 0" unless $k >= 0;
+  $self->error_code('param', 'k must be >= 0') unless $k >= 0;
   return( (defined $sub) ? $sub->($self, @_) : $self->get_unary(@_) ) if $k==0;
 
   my $count = shift;
@@ -55,11 +47,16 @@ sub get_rice {
   elsif ($count == 0)     { return;      }
 
   my @vals;
+  $self->code_pos_start('Rice');
   while ($count-- > 0) {
+    $self->code_pos_set;
     my $q = (defined $sub)  ?  $sub->($self)  :  $self->get_unary();
     last unless defined $q;
-    push @vals, ($q << $k)  |  $self->read($k);
+    my $remainder = $self->read($k);
+    $self->error_off_stream unless defined $remainder;
+    push @vals, ($q << $k)  |  $remainder;
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 no Mouse::Role;

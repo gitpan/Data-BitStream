@@ -25,6 +25,7 @@ sub string_of {
   elsif ($encoding eq 'fib')    { $stream->put_fib($d);      }
   elsif ($encoding eq 'fibc2')  { $stream->put_fib_c2($d);   }
   elsif ($encoding eq 'lev')    { $stream->put_levenstein($d);     }
+  elsif ($encoding =~ 'fibgen') { $stream->put_fibgen($p, $d);   }
   elsif ($encoding =~ /bvzeta/) { $stream->put_boldivigna($p, $d); }
   elsif ($encoding =~ /baer/)   { $stream->put_baer($p, $d); }
   elsif ($encoding =~ /escape/) { $stream->put_escape([split('-',$p)],$d); }
@@ -43,7 +44,7 @@ sub string_of {
 if (1) {
   #my @encodings = qw|Baer(-2) Baer(-1) Baer(0) Baer(1) Baer(2)|;
   #my @encodings = qw|Gamma Escape(3-7) ss(7-25)|;
-  my @encodings = qw|Gamma Delta Omega Fib Lev|;
+  my @encodings = qw|Gamma Fib FibGen(3)|;
   printf "%5s  " . (" %-11s" x scalar @encodings) . "\n", 'N', @encodings;
   printf "%5s  ", '-' x 5;
   printf " %-11s", '-' x 11 for (@encodings);

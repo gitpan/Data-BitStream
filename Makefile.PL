@@ -21,4 +21,10 @@ WriteMakefile(
                      'Mouse::Role'      => '0.58',
                  },
 
+   # I have not tested with any version of Perl previous to 5.6.2.  v5.6.2
+   # does work, though is forced to 32-bit if it detects 64-bit arithmetic is
+   # broken.  Data::BitStream::XS works fine on 5.6.2 because it is using C
+   # for the bit operations.
+   #
+   # MIN_PERL_VERSION => 5.8.0,
 );

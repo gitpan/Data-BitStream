@@ -42,7 +42,7 @@ sub put_evenrodeh {
   my $self = shift;
 
   foreach my $val (@_) {
-    die "Value must be >= 0" unless $val >= 0;
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
     if ($val <= 3) {
       $self->write(3, $val);
     } else {
@@ -67,18 +67,27 @@ sub get_evenrodeh {
   elsif ($count == 0)     { return;      }
 
   my @vals;
+  my $maxbits = $self->maxbits;
+  $self->code_pos_start('EvenRodeh');
   while ($count-- > 0) {
+    $self->code_pos_set;
+
     my $val = $self->read(3);
     last unless defined $val;
+
     if ($val > 3) {
       my $first_bit;
       while ($first_bit = $self->read(1)) {
-        $val = (1 << ($val-1)) | $self->read($val-1);
+        $self->error_code('overflow') if ($val-1) > $maxbits;
+        my $next = $self->read($val-1);
+        $self->error_off_stream unless defined $next;
+        $val = (1 << ($val-1)) | $next;
       }
+      $self->error_off_stream unless defined $first_bit;
     }
     push @vals, $val;
   }
-
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 no Mouse::Role;

@@ -24,6 +24,9 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Baer',
      'Data::BitStream::Code::BoldiVigna',
      'Data::BitStream::Code::ARice',
+     'Data::BitStream::Code::Additive',
+     'Data::BitStream::Code::Comma',
+     'Data::BitStream::Code::Taboo',
      'Data::BitStream::Code::StartStop';
 
 use Bit::Vector;
@@ -54,6 +57,7 @@ sub read {
   my $pos = $self->pos;
   my $len = $self->len;
   return if $pos >= $len;
+  die "read off end of stream" if !$peek && ($pos+$bits) > $len;
   my $vref = $self->_vec;
 
   my $val;
@@ -125,6 +129,7 @@ sub put_unary {
   my $vsize = $vref->Size();
 
   foreach my $val (@_) {
+    die "value must be >= 0" unless defined $val and $val >= 0;
     my $bits = $val+1;
     if (($len+$bits) > $vsize) {
       $vsize = int( ($len+$bits+2048) * 1.15 );
@@ -313,6 +318,18 @@ The following roles are included.
 
 =item L<Data::BitStream::Code::StartStop>
 
+=item L<Data::BitStream::Code::Baer>
+
+=item L<Data::BitStream::Code::BoldiVigna>
+
+=item L<Data::BitStream::Code::ARice>
+
+=item L<Data::BitStream::Code::Additive>
+
+=item L<Data::BitStream::Code::Comma>
+
+=item L<Data::BitStream::Code::Taboo>
+
 =back
 
 =head1 SEE ALSO
@@ -329,11 +346,11 @@ The following roles are included.
 
 =head1 AUTHORS
 
-Dana Jacobsen <dana@acm.org>
+Dana Jacobsen E<lt>dana@acm.orgE<gt>
 
 =head1 COPYRIGHT
 
-Copyright 2011 by Dana Jacobsen <dana@acm.org>
+Copyright 2011 by Dana Jacobsen E<lt>dana@acm.orgE<gt>
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 

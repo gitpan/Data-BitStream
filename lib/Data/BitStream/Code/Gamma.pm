@@ -27,12 +27,16 @@ requires qw(maxbits read write put_unary get_unary);
 # is assumed to be part of the base class, so no 'with Gamma' needs or should
 # be done.  It is done by the base classes if needed.
 
+# To calculate the length of gamma($n):
+#   my $gammalen = 1; $gammalen += 2 while ( $n >= ((2 << ($gammalen>>1))-1) );
+
 sub put_gamma {
   my $self = shift;
-  die "write while reading" unless $self->writing;
+  $self->error_stream_mode('write') unless $self->writing;
+  my $maxval = $self->maxval;
 
   foreach my $val (@_) {
-    die "value must be >= 0" unless $val >= 0;
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
     # Simple:
     #
     #   my $base = 0;
@@ -44,7 +48,7 @@ sub put_gamma {
     if    ($val == 0)  { $self->write(1, 1); }
     elsif ($val == 1)  { $self->write(3, 2); }  # optimization
     elsif ($val == 2)  { $self->write(3, 3); }  # optimization
-    elsif ($val == ~0) { $self->put_unary($self->maxbits); }
+    elsif ($val == $maxval) { $self->put_unary($self->maxbits); }
     else {
       my $base = 0;
       { my $v = $val+1; $base++ while ($v >>= 1); }
@@ -61,7 +65,7 @@ sub put_gamma {
 
 sub get_gamma {
   my $self = shift;
-  die "read while writing" if $self->writing;
+  $self->error_stream_mode('read') if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -69,17 +73,21 @@ sub get_gamma {
 
   my $maxbits = $self->maxbits;
   my @vals;
+  $self->code_pos_start('Gamma');
   while ($count-- > 0) {
+    $self->code_pos_set;
     my $base = $self->get_unary();
     last unless defined $base;
-    if    ($base == 0) {  push @vals, 0; }
-    elsif ($base == 1) {  push @vals, (2 | $self->read(1))-1; }  # optimization
-    elsif ($base == 2) {  push @vals, (4 | $self->read(2))-1; }  # optimization
-    elsif ($base == $maxbits) { push @vals, ~0; }
-    else  {
-      push @vals, ((1 << $base) | $self->read($base))-1;
+    if    ($base == 0)        {  push @vals, 0; }
+    elsif ($base == $maxbits) { push @vals, $self->maxval; }
+    elsif ($base  > $maxbits) { $self->error_code('base', $base); }
+    else {
+      my $remainder = $self->read($base);
+      $self->error_off_stream unless defined $remainder;
+      push @vals, ((1 << $base) | $remainder)-1;
     }
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 no Mouse::Role;

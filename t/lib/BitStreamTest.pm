@@ -61,7 +61,9 @@ if (eval {require Data::BitStream::BLVec}) {
 # The big item would be any MOP (meta object protocol) handling, since the XS
 # class isn't Moose/Mouse/Moo.
 if (eval {require Data::BitStream::XS}) {
-  $stream_constructors{'xs'} = sub {return Data::BitStream::XS->new();};
+  if ($Data::BitStream::XS::VERSION >= 0.04) {
+    $stream_constructors{'xs'} = sub {return Data::BitStream::XS->new();};
+  }
 }
 
 sub impl_list {
@@ -88,19 +90,26 @@ sub is_universal {
   return 1 if $enc =~ /^(gamma|delta|omega|evenrodeh|fib|fibc2|gg|eg|lev|bvzeta|baer|arice)\b/;
   return 1 if $enc =~ /^(delta|omega|fib|fibc2|er)gol\b/;
   return 1 if $enc =~ /^binword\($maxbits\)$/;
+  # TODO: figure this out
+  #return 0 if $enc =~ /^blocktaboo\(.\)$/;
+  #return 0 if $enc =~ /^comma\(1\)$/;
+  #return 1 if $enc =~ /^(blocktaboo|comma)\b/;
   return 0;
 }
 
 sub encoding_list {
   my @e = qw|
-              Unary Unary1 Gamma Delta Omega Fib
+              Unary Unary1 Gamma Delta Omega Fib Fib(3)
               EvenRodeh Levenstein
+              GoldbachG1 GoldbachG2
               Golomb(10) Golomb(16) Golomb(14000)
               Rice(2) Rice(9)
               GG(3) GG(128) EG(5)
               DeltaGol(21) OmegaGol(21) FibGol(21) ERGol(890)
               BVZeta(2) Baer(0) Baer(-2) Baer(2)
               SSS(3-3-99) SS(1-0-1-0-2-12-99)
+              Comma(2) Comma(3)
+              BlockTaboo(00) BlockTaboo(10011)
               ARice(9)
             |;
   unshift @e, "Binword($maxbits)";
@@ -124,6 +133,9 @@ my %esubs = (
   'levenstein'=>sub{my $stream=shift; my $p=shift; $stream->put_levenstein(@_)},
   'evenrodeh'=>sub{ my $stream=shift; my $p=shift; $stream->put_evenrodeh(@_) },
   'fib'    => sub { my $stream=shift; my $p=shift; $stream->put_fib(@_) },
+  'fib'    => sub { my $stream=shift; my $p=shift;
+                    if (defined $p) { $stream->put_fibgen($p,@_); }
+                    else            { $stream->put_fib(@_);       } },
   'fibc2'  => sub { my $stream=shift; my $p=shift; $stream->put_fib_c2(@_) },
   'binword'=> sub { my $stream=shift; my $p=shift; $stream->put_binword($p,@_)},
   'gg'     => sub { my $stream=shift; my $p=shift; $stream->put_gammagolomb($p,@_) },
@@ -140,6 +152,10 @@ my %esubs = (
   'unary1' => sub { my $stream=shift; my $p=shift; $stream->put_unary1(@_) },
   'golomb' => sub { my $stream=shift; my $p=shift; $stream->put_golomb($p,@_) },
   'rice'   => sub { my $stream=shift; my $p=shift; $stream->put_rice($p,@_) },
+  'goldbachg1'=>sub{ my $stream=shift; my $p=shift; $stream->put_goldbach_g1(@_) },
+  'goldbachg2'=>sub{ my $stream=shift; my $p=shift; $stream->put_goldbach_g2(@_) },
+  'blocktaboo' => sub { my $stream=shift; my $p=shift; $stream->put_blocktaboo($p,@_) },
+  'comma'  => sub { my $stream=shift; my $p=shift; $stream->put_comma($p,@_) },
   'sss'    => sub { my $stream=shift; my $p=shift; $stream->put_startstepstop([split('-',$p)],@_) },
   'ss'     => sub { my $stream=shift; my $p=shift; $stream->put_startstop([split('-',$p)],@_) },
   'escape' => sub { my $stream=shift; my $p=shift; $stream->put_escape([split('-',$p)],@_) },
@@ -151,7 +167,9 @@ my %dsubs = (
   'omega'  => sub { my $stream=shift; my $p=shift; $stream->get_omega(@_) },
   'levenstein'=>sub{my $stream=shift; my $p=shift; $stream->get_levenstein(@_)},
   'evenrodeh'=>sub{ my $stream=shift; my $p=shift; $stream->get_evenrodeh(@_) },
-  'fib'    => sub { my $stream=shift; my $p=shift; $stream->get_fib(@_) },
+  'fib'    => sub { my $stream=shift; my $p=shift;
+                    if (defined $p) { $stream->get_fibgen($p,@_); }
+                    else            { $stream->get_fib(@_);       } },
   'fibc2'  => sub { my $stream=shift; my $p=shift; $stream->get_fib_c2(@_) },
   'binword'=> sub { my $stream=shift; my $p=shift; $stream->get_binword($p,@_)},
   'gg'     => sub { my $stream=shift; my $p=shift; $stream->get_gammagolomb($p,@_) },
@@ -168,6 +186,10 @@ my %dsubs = (
   'unary1' => sub { my $stream=shift; my $p=shift; $stream->get_unary1(@_) },
   'golomb' => sub { my $stream=shift; my $p=shift; $stream->get_golomb($p,@_) },
   'rice'   => sub { my $stream=shift; my $p=shift; $stream->get_rice($p,@_) },
+  'goldbachg1'=>sub{ my $stream=shift; my $p=shift; $stream->get_goldbach_g1(@_) },
+  'goldbachg2'=>sub{ my $stream=shift; my $p=shift; $stream->get_goldbach_g2(@_) },
+  'blocktaboo' => sub { my $stream=shift; my $p=shift; $stream->get_blocktaboo($p,@_) },
+  'comma'  => sub { my $stream=shift; my $p=shift; $stream->get_comma($p,@_) },
   'sss'    => sub { my $stream=shift; my $p=shift; $stream->get_startstepstop([split('-',$p)],@_) },
   'ss'     => sub { my $stream=shift; my $p=shift; $stream->get_startstop([split('-',$p)],@_) },
   'escape' => sub { my $stream=shift; my $p=shift; $stream->get_escape([split('-',$p)],@_) },

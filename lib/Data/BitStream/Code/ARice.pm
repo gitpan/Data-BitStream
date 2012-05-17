@@ -57,20 +57,16 @@ sub _adjust_k {
 
 sub put_arice {
   my $self = shift;
-  my $sub;
+  my $sub = shift if ref $_[0] eq 'CODE';  ## no critic
   my $k = shift;
-  if (ref $k eq 'CODE') {   # Check for sub as first parameter
-    $sub = $k;
-    $k = shift;
-  }
-  die "k must be >= 0" unless $k >= 0;
+  $self->error_code('param', 'k must be >= 0') unless $k >= 0;
 
   # If small values are common (k often 0) then this will reduce the number
   # of method calls required, which makes us run a little faster.
   my @q_list;
 
   foreach my $val (@_) {
-    die "Value must be >= 0" unless $val >= 0;
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
     if ($k == 0) {
       push @q_list, $val;
       $k++ if $val >= QHIGH;   # _adjust_k shortcut
@@ -95,15 +91,9 @@ sub put_arice {
 }
 sub get_arice {
   my $self = shift;
-  my $sub;
+  my $sub = shift if ref $_[0] eq 'CODE';  ## no critic
   my $k = shift;
-  if (ref $k eq 'CODE') {   # Check for sub as first parameter
-    $sub = $k;
-    $k = shift;
-  }
-
-  die "k must be >= 0" unless $k >= 0;
-  #return( (defined $sub) ? $sub->($self, @_) : $self->get_unary(@_) ) if $k==0;
+  $self->error_code('param', 'k must be >= 0') unless $k >= 0;
 
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
@@ -111,25 +101,32 @@ sub get_arice {
   elsif ($count == 0)     { return;      }
 
   my @vals;
+  $self->code_pos_start('ARice');
   while ($count-- > 0) {
-    # Optimization, read two values at once if we can
+    $self->code_pos_set;
+    # Optimization: if possible (k==0), read two values at once.
+    my($q, $q1);
     if ( ($k == 0) && ($count > 0) ) {
-      my($q1,$q2) = (defined $sub)  ?  $sub->($self, 2)  :  $self->get_gamma(2);
+      ($q1, $q) = (defined $sub)  ?  $sub->($self, 2)  :  $self->get_gamma(2);
       last unless defined $q1;
       push @vals, $q1;
       $k = _adjust_k($k, $q1);
-      last unless defined $q2;
-      push @vals, ($k == 0)  ?  $q2  :  (($q2 << $k) | $self->read($k));
-      $k = _adjust_k($k, $q2);
       $count--;
-      next;
+      $self->code_pos_set;
+    } else {
+      $q = (defined $sub)  ?  $sub->($self)  :  $self->get_gamma();
     }
-    my $q = (defined $sub)  ?  $sub->($self)  :  $self->get_gamma();
     last unless defined $q;
-    push @vals, ($k == 0)  ?  $q  :  (($q << $k) | $self->read($k));
-    # adjust k
+    if ($k == 0) {
+      push @vals, $q;
+    } else {
+      my $remainder = $self->read($k);
+      $self->error_off_stream unless defined $remainder;
+      push @vals, (($q << $k) | $remainder);
+    }
     $k = _adjust_k($k, $q);
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
   # how to return k?
 }

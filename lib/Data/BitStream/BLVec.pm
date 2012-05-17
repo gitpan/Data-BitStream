@@ -3,7 +3,9 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::BLVec::AUTHORITY = 'cpan:DANAJ';
-  $Data::BitStream::BLVec::VERSION   = '0.01';
+}
+BEGIN {
+  $Data::BitStream::BLVec::VERSION   = '0.02';
 }
 
 use Mouse;
@@ -22,9 +24,12 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Baer',
      'Data::BitStream::Code::BoldiVigna',
      'Data::BitStream::Code::ARice',
+     'Data::BitStream::Code::Additive',
+     'Data::BitStream::Code::Comma',
+     'Data::BitStream::Code::Taboo',
      'Data::BitStream::Code::StartStop';
 
-use Data::BitStream::XS;
+use Data::BitStream::XS 0.04;
 
 has '_vec' => (is => 'rw',
                isa => 'Data::BitStream::XS',
@@ -91,7 +96,7 @@ sub _generate_generic_put {
   $st =~ s/__PARAM__/$param/;
   $st =~ s/__CALLFUNC__/$blfn(\@_)/g;
 
-  { no warnings 'redefine';  eval $st; }
+  { no warnings 'redefine';  eval $st; }  ## no critic
   warn $@ if $@;
 }
 sub _generate_generic_get {
@@ -117,7 +122,7 @@ sub _generate_generic_get {
   $st =~ s/__PARAM__/$param/;
   $st =~ s/__CALLFUNC__/$blfn(\@_)/g;
 
-  { no warnings 'redefine';  eval $st; }
+  { no warnings 'redefine';  eval $st; }  ## no critic
   warn $@ if $@;
 }
 
@@ -135,12 +140,17 @@ _generate_generic_getput('', 'gamma');
 _generate_generic_getput('', 'delta');
 _generate_generic_getput('', 'omega');
 _generate_generic_getput('', 'fib');
+_generate_generic_getput('', 'fibgen');
 _generate_generic_getput('', 'levenstein');
 _generate_generic_getput('', 'evenrodeh');
 _generate_generic_getput('', 'gammagolomb');
 _generate_generic_getput('', 'expgolomb');
 _generate_generic_getput('', 'baer');
 _generate_generic_getput('', 'boldivigna');
+_generate_generic_getput('', 'comma');
+_generate_generic_getput('', 'blocktaboo');
+_generate_generic_getput('', 'goldbach_g1');
+_generate_generic_getput('', 'goldbach_g2');
 _generate_generic_getput('', 'binword');
 
 # The XS module understands subs, so we can map these directly
@@ -177,7 +187,13 @@ sub to_raw {
   my $vref = $self->_vec;
   return $vref->to_raw;
 }
-
+sub put_raw {
+  my $self = shift;
+  my $vref = $self->_vec;
+  $vref->put_raw(@_);
+  $self->_setlen( $vref->len );
+  1;
+}
 sub from_raw {
   my $self = $_[0];
   # data comes in 2nd argument

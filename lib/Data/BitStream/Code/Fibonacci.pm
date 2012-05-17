@@ -3,7 +3,7 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Fibonacci::AUTHORITY = 'cpan:DANAJ';
-  $Data::BitStream::Code::Fibonacci::VERSION   = '0.03';
+  $Data::BitStream::Code::Fibonacci::VERSION   = '0.04';
 }
 
 our $CODEINFO = [ { package   => __PACKAGE__,
@@ -19,6 +19,13 @@ our $CODEINFO = [ { package   => __PACKAGE__,
                     params    => 0,
                     encodesub => sub {shift->put_fib_c2(@_)},
                     decodesub => sub {shift->get_fib_c2(@_)},
+                  },
+                  { package   => __PACKAGE__,
+                    name      => 'FibGen',
+                    universal => 1,
+                    params    => 1,
+                    encodesub => sub {shift->put_fibgen(@_)},
+                    decodesub => sub {shift->get_fibgen(@_)},
                   },
                 ];
 
@@ -36,16 +43,18 @@ requires qw(write put_string get_unary read);
 # same stream.  For example, if a C2 code is followed by a zero-based unary
 # code then incorrect parsing will ensue.
 #
-# Note that these are Fib_2 codes.  The concept can be generalized to Fib_m
-# where m >= 2.  In particular the m=3 and m=4 codes have proven useful in some
-# applications (see papers by Klein et al.).
+# The first set of methods, get_fib() and put_fib(), are specifically written
+# for m=2 -- codes using the traditional Fibonacci sequence.  There are also
+# generalized versions, which Klein et al. shows are useful for some
+# applications.  The generalized implementation is typically slower.
 
 # General order m >= 2 sequences.  Generate enough to encode any integer
 # from 0 to ~0.  Note that the first 0,1 for all sequences are removed.
 my @fibs_order;
+my @fib_sums_order;
 sub _calc_fibs_for_order_m {
   my $m = shift;
-  die unless $m >= 2;
+  die "Internal Fibonacci error" unless $m >= 2;
   my @fibm = (0) x ($m-1);
   push @fibm, 1, 1, 2;
   my $v1 = $fibm[-1];
@@ -55,6 +64,11 @@ sub _calc_fibs_for_order_m {
   }
   splice(@fibm, 0, $m);  # remove the first elements
   $fibs_order[$m] = \@fibm;
+
+  # Calculate sums (with 0 at start)
+  my @fsums = (0);
+  foreach my $f (@fibm) { push @fsums, $fsums[-1] + $f; }
+  $fib_sums_order[$m] = \@fsums;
 }
 
 # Since calculating the Fibonacci codes are relatively expensive, cache the
@@ -64,11 +78,13 @@ my @fib_code_cache;
 
 sub put_fib {
   my $self = shift;
+  $self->error_stream_mode('write') unless $self->writing;
+
   _calc_fibs_for_order_m(2) unless defined $fibs_order[2];
   my @fibs = @{$fibs_order[2]};  # arguably we should just use the reference
 
   foreach my $val (@_) {
-    die "Value must be >= 0" unless $val >= 0;
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
 
     if ( ($val < $fib_code_cache_size) && (defined $fib_code_cache[$val]) ) {
       $self->write( @{$fib_code_cache[$val]} );
@@ -145,6 +161,7 @@ sub put_fib {
 
 sub get_fib {
   my $self = shift;
+  $self->error_stream_mode('read') if $self->writing;
 
   _calc_fibs_for_order_m(2) unless defined $fibs_order[2];
   my @fibs = @{$fibs_order[2]};  # arguably we should just use the reference
@@ -155,45 +172,72 @@ sub get_fib {
   elsif ($count == 0)     { return;      }
 
   my @vals;
+  $self->code_pos_start('Fibonacci');
   while ($count-- > 0) {
+    $self->code_pos_set;
     my $code = $self->get_unary;
     last unless defined $code;
     # Start with -1 here instead of subtracting it later.  No overflow issues.
     my $val = -1;
     my $b = -1;
     do {
-      die "Read off end of stream" unless defined $code;
       $b += $code+1;
+      $self->error_code('overflow') unless defined $fibs[$b];
       $val += $fibs[$b];
-    } while ($code = $self->get_unary);
+      $code = $self->get_unary;
+      $self->error_off_stream unless defined $code;
+    } while ($code != 0);
     push @vals, $val;
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 
 
-# TODO: fibm does not work yet
+########## Generalized Fibonacci codes
 
-sub put_fibm {
+sub put_fibgen {
   my $self = shift;
+  $self->error_stream_mode('write') unless $self->writing;
   my $m = shift;
-  die "invalid parameters" unless $m >= 2 && $m <= 10;
+  $self->error_code('param', 'm must be in range 2-16') unless $m >= 2 && $m <= 16;
+
   _calc_fibs_for_order_m($m) unless defined $fibs_order[$m];
   my @fibm = @{$fibs_order[$m]};
+  my @fsums = @{$fib_sums_order[$m]};
+  my $term = ~(~0 << $m);
 
   foreach my $val (@_) {
-    die "Value must be >= 0" unless $val >= 0;
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
 
-    if    ($val == 0) {  $self->put_string(      '1' x $m); next; }
-    elsif ($val == 1) {  $self->put_string('0' . '1' x $m); next; }
+    if    ($val == 0) {  $self->write($m, $term); next; }
+    elsif ($val == 1) {  $self->write($m+1, $term); next; }
 
-    my $d = $val+1;
-    my $s = 0;
-    #$s += 20  while (defined $fibm[$s+20]) && ($d >= $fibm[$s+20]);
-    $s++ while ($d >= $fibm[$s]);
+    # The way these codes are built are a different way of thinking about it
+    # than the simple m=2 case.  See Salomon VLC p. 117.
+    # However, the end result is identical for m=2.
 
-    # Generate the string code.
-    my $r = '1' x ($m-1);
+    # Determine how many bits we will encode
+    my $s = 1;
+    $s++ while ($val > $fsums[$s+1]);
+    my $d = $val - $fsums[$s] - 1;
+
+    # Generate 32-bit word directly if possible
+    my $sm = $s + $m;
+    if ($sm <= 31) {
+      my $word = $term;
+      foreach my $f (reverse 0 .. $s-1) {
+        if ($d >= $fibm[$f]) {
+          $d -= $fibm[$f];
+          $word |= 1 << ($sm-$f);
+        }
+      }
+      $self->write($sm+1, $word);
+      next;
+    }
+
+    # Encode the bits using string functions
+    my $r = '1' x $m . '0';
     while ($s-- > 0) {
       if ($d >= $fibm[$s]) {
         $d -= $fibm[$s];
@@ -202,41 +246,79 @@ sub put_fibm {
         $r .= '0';
       }
     }
+
     $self->put_string(scalar reverse $r);
   }
   1;
 }
 
-sub get_fibm {
+sub get_fibgen {
   my $self = shift;
+  $self->error_stream_mode('read') if $self->writing;
   my $m = shift;
-  die "invalid parameters" unless $m >= 2 && $m <= 10;
+  $self->error_code('param', 'm must be in range 2-16') unless $m >= 2 && $m <= 16;
+
   _calc_fibs_for_order_m($m) unless defined $fibs_order[$m];
   my @fibm = @{$fibs_order[$m]};
+  my @fsums = @{$fib_sums_order[$m]};
+  my $term = ~(~0 << $m);
+
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
   elsif ($count == 0)     { return;      }
 
-  my $term = ~(~0 << $m);
-
   my @vals;
+  $self->code_pos_start("FibGen($m)");
   while ($count-- > 0) {
-    my $code = $self->readahead($m);
+    $self->code_pos_set;
+
+    my $code = $self->read($m);
     last unless defined $code;
-    my $val = 1;
-    my $s = 0;
-    while ($code != $term) {
-      $val += $fibm[$s]  if $self->read(1);
-      $s++;
-      $code = $self->readahead($m);
+    if ($code == $term) {
+      push @vals, 0;
+      next;
     }
-    $self->skip($m);
-    push @vals, $val-1;
+
+    my $fullcode = $code;
+    my $s = 0;
+    my $val = 1;
+    while (1) {
+
+      # Count 1 bits on the left
+      my $count = 0;
+      $count++ while ($fullcode & (1 << $count));
+
+      # Read as many more as we can while looking for 1 repeated $m times
+      # We will be reading 1-$m bits at a time.
+      my $codelen = $m-$count;
+      last if $codelen == 0;
+      $code = $self->read($codelen);
+      $self->error_off_stream unless defined $code;
+
+      # Add latest read to full code in progress
+      $fullcode = ($fullcode << $codelen) | $code;
+
+      # Process leftmost bits
+      my $left = $fullcode >> $m;
+      foreach my $c (reverse 0 .. $codelen-1) {
+        $self->error_code('overflow') unless defined $fibm[$s];
+        $val += $fibm[$s]  if ($left & (1 << $c));
+        #my $adder = ($left & (1 << $c))  ?  $fibm[$s]  :  0;
+        #print "s = $s  val = $val (added $adder)\n";
+        $s++;
+      }
+      $fullcode &= $term;    # Done with them
+    }
+    #print "s = $s  val = ", $val+$fsums[$s-1], " (added $fsums[$s-1])\n";
+    push @vals, $val + $fsums[$s-1];
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 
+
+# TODO:
 # Consider Sayood's NF3 code, described on pages 67-70 of his
 # Lossless Compression Handbook
 #
@@ -249,7 +331,7 @@ sub get_fibm {
 
 sub _encode_fib_c1 {
   my $d = shift;
-  die "Value must be between 1 and ~0" unless $d >= 1 and $d <= ~0;
+  return unless $d >= 1 and $d <= ~0;
   _calc_fibs_for_order_m(2) unless defined $fibs_order[2];
   my @fibs = @{$fibs_order[2]};
   my $s =  ($d < $fibs[20])  ?  0  :  ($d < $fibs[40])  ?  21  :  41;
@@ -268,7 +350,7 @@ sub _encode_fib_c1 {
 
 sub _decode_fib_c1 {
   my $str = shift;
-  die "Invalid Fibonacci C1 code" unless $str =~ /^[01]*11$/;
+  return unless $str =~ /^[01]*11$/;
   _calc_fibs_for_order_m(2) unless defined $fibs_order[2];
   my @fibs = @{$fibs_order[2]};
   my $val = 0;
@@ -280,9 +362,10 @@ sub _decode_fib_c1 {
 
 sub _encode_fib_c2 {
   my $d = shift;
-  die "Value must be between 1 and ~0" unless $d >= 1 and $d <= ~0;
+  return unless $d >= 1 and $d <= ~0;
   return '1' if $d == 1;
   my $str = _encode_fib_c1($d-1);
+  return unless defined $str;
   substr($str, -1, 1) = '';
   substr($str, 0, 0) = '10';
   $str;
@@ -291,30 +374,36 @@ sub _encode_fib_c2 {
 sub _decode_fib_c2 {
   my $str = shift;
   return 1 if $str eq '1';
-  die "Invalid Fibonacci C2 code" unless $str =~ /^10[01]*1$/;
+  return unless $str =~ /^10[01]*1$/;
   $str =~ s/^10//;
-  my $val = _decode_fib_c1($str . '1') + 1;
-  $val;
+  my $val = _decode_fib_c1($str . '1');
+  return unless defined $val;
+  $val+1;
 }
 
 sub put_fib_c2 {
   my $self = shift;
 
   foreach my $val (@_) {
-    die "Value must be >= 0" unless $val >= 0;
-    $self->put_string(_encode_fib_c2($val+1));
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
+    my $c2_string = _encode_fib_c2($val+1);
+    $self->error_code('value', $val) unless defined $c2_string;
+    $self->put_string($c2_string);
   }
   1;
 }
 sub get_fib_c2 {
   my $self = shift;
+  $self->error_stream_mode('read') if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
   elsif ($count == 0)     { return;      }
 
   my @vals;
+  $self->code_pos_start('Fibonacci C2');
   while ($count-- > 0) {
+    $self->code_pos_set;
     my $str = '';
     if (0) {
       my $look = $self->read(8, 'readahead');
@@ -334,11 +423,15 @@ sub get_fib_c2 {
     my $b2 = $self->read(1, 'readahead');
     while ( (defined $b2) && ($b2 != 1) ) {
       my $skip = $self->get_unary;
+      $self->error_off_stream unless defined $skip;
       $str .= '0' x $skip . '1';
       $b2 = $self->read(1, 'readahead');
     }
-    push @vals, _decode_fib_c2($str)-1;
+    my $val = _decode_fib_c2($str);
+    $self->error_code('string', "Not a Fibonacci C2 code") unless defined $val;
+    push @vals, $val-1;
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 no Mouse::Role;
@@ -354,7 +447,7 @@ Data::BitStream::Code::Fibonacci - A Role implementing Fibonacci codes
 
 =head1 VERSION
 
-version 0.02
+version 0.04
 
 =head1 DESCRIPTION
 
@@ -381,6 +474,21 @@ Decode one or more Fibonacci C1 codes from the stream.  If count is omitted,
 one value will be read.  If count is negative, values will be read until
 the end of the stream is reached.  In scalar context it returns the last
 code read; in array context it returns an array of all codes read.
+
+=item B< put_fibgen($m, @values) >
+
+Insert one or more values as generalized Fibonacci C1 codes with order C<m>.
+Returns 1.
+
+=item B< get_fibgen($m) >
+
+=item B< get_fib($m, $count) >
+
+Decode one or more generalized Fibonacci C1 codes with order C<m> from the
+stream.  If count is omitted, one value will be read.  If count is negative,
+values will be read until the end of the stream is reached.  In scalar context
+it returns the last code read; in array context it returns an array of all
+codes read.
 
 =item B< put_fib_c2(@values) >
 
@@ -440,7 +548,7 @@ Dana Jacobsen <dana@acm.org>
 
 =head1 COPYRIGHT
 
-Copyright 2011 by Dana Jacobsen <dana@acm.org>
+Copyright 2011-2012 by Dana Jacobsen <dana@acm.org>
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 

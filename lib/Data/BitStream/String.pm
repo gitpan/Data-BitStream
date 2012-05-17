@@ -5,7 +5,7 @@ BEGIN {
   $Data::BitStream::String::AUTHORITY = 'cpan:DANAJ';
 }
 BEGIN {
-  $Data::BitStream::String::VERSION = '0.01';
+  $Data::BitStream::String::VERSION = '0.02';
 }
 
 use Mouse;
@@ -24,6 +24,9 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Baer',
      'Data::BitStream::Code::BoldiVigna',
      'Data::BitStream::Code::ARice',
+     'Data::BitStream::Code::Additive',
+     'Data::BitStream::Code::Comma',
+     'Data::BitStream::Code::Taboo',
      'Data::BitStream::Code::StartStop';
 
 has '_str' => (is => 'rw', default => '');
@@ -40,16 +43,17 @@ after 'erase' => sub {
 };
 sub read {
   my $self = shift;
-  die "read while writing" if $self->writing;
+  $self->error_stream_mode('read') if $self->writing;
   my $bits = shift;
-  die "invalid bits: $bits" unless defined $bits && $bits > 0 && $bits <= $self->maxbits;
+  $self->error_code('param', 'bits must be in range 1-' . $self->maxbits)
+         unless defined $bits && $bits > 0 && $bits <= $self->maxbits;
   my $peek = (defined $_[0]) && ($_[0] eq 'readahead');
 
   my $pos = $self->pos;
   my $len = $self->len;
   return if $pos >= $len;
+  $self->error_off_stream if !$peek && ($pos+$bits) > $len;
 
-  # What about reading past the end in this read?
   my $rstr = $self->_strref;
   my $str = substr($$rstr, $pos, $bits);
   { # This is for readahead.  We should use a write-close method instead.
@@ -69,11 +73,11 @@ sub read {
 }
 sub write {
   my $self = shift;
-  die "write while reading" unless $self->writing;
+  $self->error_stream_mode('write') unless $self->writing;
   my $bits = shift;
-  die "invalid bits: $bits" unless defined $bits && $bits > 0;
+  $self->error_code('param', 'bits must be > 0') unless defined $bits && $bits > 0;
   my $val  = shift;
-  die "undefined value" unless defined $val;
+  $self->error_code('zeroval') unless defined $val and $val >= 0;
 
   my $rstr = $self->_strref;
 
@@ -84,7 +88,7 @@ sub write {
     $$rstr .= '1';
   } else {
 
-    die "invalid bits: $bits" if $bits > $self->maxbits;
+    $self->error_code('param', 'bits must be <= ' . $self->maxbits) if $bits > $self->maxbits;
 
     # The following is typically fastest with 5.9.2 and later:
     #
@@ -112,12 +116,13 @@ sub write {
 
 sub put_unary {
   my $self = shift;
-  die "write while reading" unless $self->writing;
+  $self->error_stream_mode('write') unless $self->writing;
 
   my $rstr = $self->_strref;
   my $len = $self->len;
 
   foreach my $val (@_) {
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
     $$rstr .= '0' x ($val) . '1';
     $len += $val+1;
   }
@@ -127,7 +132,7 @@ sub put_unary {
 }
 sub get_unary {
   my $self = shift;
-  die "read while writing" if $self->writing;
+  $self->error_stream_mode('read') if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -141,7 +146,7 @@ sub get_unary {
   while ($count-- > 0) {
     last if $pos >= $len;
     my $onepos = index( $$rstr, '1', $pos );
-    die "read off stream" if $onepos == -1;
+    $self->error_off_stream() if $onepos == -1;
     my $val = $onepos - $pos;
     $pos = $onepos + 1;
     push @vals, $val;
@@ -152,12 +157,13 @@ sub get_unary {
 
 sub put_unary1 {
   my $self = shift;
-  die "write while reading" unless $self->writing;
+  $self->error_stream_mode('write') unless $self->writing;
 
   my $rstr = $self->_strref;
   my $len = $self->len;
 
   foreach my $val (@_) {
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
     $$rstr .= '1' x ($val) . '0';
     $len += $val+1;
   }
@@ -167,7 +173,7 @@ sub put_unary1 {
 }
 sub get_unary1 {
   my $self = shift;
-  die "read while writing" if $self->writing;
+  $self->error_stream_mode('read') if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -181,7 +187,7 @@ sub get_unary1 {
   while ($count-- > 0) {
     last if $pos >= $len;
     my $onepos = index( $$rstr, '0', $pos );
-    die "read off stream" if $onepos == -1;
+    $self->error_off_stream() if $onepos == -1;
     my $val = $onepos - $pos;
     $pos = $onepos + 1;
     push @vals, $val;
@@ -192,18 +198,19 @@ sub get_unary1 {
 
 sub put_gamma {
   my $self = shift;
-  die "write while reading" unless $self->writing;
+  $self->error_stream_mode('write') unless $self->writing;
 
   my $rstr = $self->_strref;
   my $len = $self->len;
+  my $maxval = $self->maxval;
 
   foreach my $val (@_) {
-    die "value must be >= 0" unless $val >= 0;
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
     my $vstr;
     if    ($val == 0)  { $vstr = '1'; }
     elsif ($val == 1)  { $vstr = '010'; }
     elsif ($val == 2)  { $vstr = '011'; }
-    elsif ($val == ~0) { $vstr = '0' x $self->maxbits . '1'; }
+    elsif ($val == $maxval) { $vstr = '0' x $self->maxbits . '1'; }
     else {
       my $base = 0;
       { my $v = $val+1; $base++ while ($v >>= 1); }
@@ -225,7 +232,7 @@ sub put_gamma {
 
 sub get_gamma {
   my $self = shift;
-  die "read while writing" if $self->writing;
+  $self->error_stream_mode('read') if $self->writing;
   my $count = shift;
   if    (!defined $count) { $count = 1;  }
   elsif ($count  < 0)     { $count = ~0; }   # Get everything
@@ -234,17 +241,20 @@ sub get_gamma {
   my $pos = $self->pos;
   my $len = $self->len;
   my $rstr = $self->_strref;
+  my $maxbits = $self->maxbits;
 
   my @vals;
   while ($count-- > 0) {
     last if $pos >= $len;
     my $onepos = index( $$rstr, '1', $pos );
-    die "read off stream" if $onepos == -1;
+    $self->error_off_stream() if $onepos == -1;
     my $base = $onepos - $pos;
     $pos = $onepos + 1;
     if    ($base == 0) {  push @vals, 0; }
-    elsif ($base == $self->maxbits) { push @vals, ~0; }
+    elsif ($base == $maxbits) { push @vals, $self->maxval; }
+    elsif ($base  > $maxbits) { $self->error_code('base', $base); }
     else  {
+      $self->error_off_stream() if ($pos+$base) > $len;
       my $vstr = substr($$rstr, $pos, $base);
       $pos += $base;
       my $rval;
@@ -258,14 +268,14 @@ sub get_gamma {
 
 sub put_string {
   my $self = shift;
-  die "write while reading" unless $self->writing;
+  $self->error_stream_mode('write') unless $self->writing;
 
   my $len = $self->len;
   my $rstr = $self->_strref;
 
   foreach my $str (@_) {
     next unless defined $str;
-    die "invalid string" if $str =~ tr/01//c;
+    $self->error_code('string') if $str =~ tr/01//c;
     my $bits = length($str);
     next unless $bits > 0;
 
@@ -277,13 +287,13 @@ sub put_string {
 }
 sub read_string {
   my $self = shift;
-  die "read while writing" if $self->writing;
+  $self->error_stream_mode('read') if $self->writing;
   my $bits = shift;
-  die "invalid bits: $bits" unless defined $bits && $bits >= 0;
+  $self->error_code('param', "bits must be >= 0") unless defined $bits && $bits >= 0;
 
   my $len = $self->len;
   my $pos = $self->pos;
-  die "short read" unless $bits <= ($len - $pos);
+  $self->error_code('short') unless $bits <= ($len - $pos);
   my $rstr = $self->_strref;
 
   $self->_setpos( $pos + $bits );
@@ -299,7 +309,7 @@ sub to_string {
 sub from_string {
   my $self = shift;
   my $str  = shift;
-  die "invalid string" if $str =~ tr/01//c;
+  $self->error_code('string') if $str =~ tr/01//c;
   my $bits = shift || length($str);
   $self->write_open;
 
@@ -309,7 +319,31 @@ sub from_string {
   $self->rewind_for_read;
 }
 
-# Using default to_raw, from_raw
+sub to_raw {
+  my $self = shift;
+  $self->write_close;
+  return pack("B*", $self->_str);
+}
+sub put_raw {
+  my $self = shift;
+  $self->error_stream_mode('write') unless $self->writing;
+  my $vec  = shift;
+  my $bits = shift || int((length($vec)+7)/8);
+
+  my $str = unpack("B$bits", $vec);
+  my $strlen = length($str);
+  $self->error_code('assert', "string length") if $strlen > $bits;
+  if ($strlen < $bits) {
+    $str .= "0" x ($bits - $strlen);
+  }
+
+  my $rstr = $self->_strref;
+  $$rstr .= $str;
+  $self->_setlen( $self->len + $bits );
+  1;
+}
+
+# Using default from_raw
 # Using default to_store, from_store
 
 # An example.  We have a custom put_string so this isn't much faster.
@@ -441,6 +475,18 @@ implementation.
 
 =item L<Data::BitStream::Code::StartStop>
 
+=item L<Data::BitStream::Code::Baer>
+
+=item L<Data::BitStream::Code::BoldiVigna>
+
+=item L<Data::BitStream::Code::ARice>
+
+=item L<Data::BitStream::Code::Additive>
+
+=item L<Data::BitStream::Code::Comma>
+
+=item L<Data::BitStream::Code::Taboo>
+
 =back
 
 =head1 SEE ALSO
@@ -457,11 +503,11 @@ implementation.
 
 =head1 AUTHORS
 
-Dana Jacobsen <dana@acm.org>
+Dana Jacobsen E<lt>dana@acm.orgE<gt>
 
 =head1 COPYRIGHT
 
-Copyright 2011 by Dana Jacobsen <dana@acm.org>
+Copyright 2011-2012 by Dana Jacobsen E<lt>dana@acm.orgE<gt>
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 

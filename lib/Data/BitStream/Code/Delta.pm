@@ -26,11 +26,13 @@ requires qw(maxbits read write put_gamma get_gamma);
 
 sub put_delta {
   my $self = shift;
+  my $maxbits = $self->maxbits;
+  my $maxval = $self->maxval;
 
   foreach my $val (@_) {
-    die "Value must be >= 0" unless $val >= 0;
-    if ($val == ~0) {
-      $self->put_gamma($self->maxbits);
+    $self->error_code('zeroval') unless defined $val and $val >= 0;
+    if ($val == $maxval) {
+      $self->put_gamma($maxbits);
     } else {
       my $base = 0;
       { my $v = $val+1; $base++ while ($v >>= 1); }
@@ -49,17 +51,22 @@ sub get_delta {
   elsif ($count == 0)     { return;      }
 
   my @vals;
+  my $maxbits = $self->maxbits;
+  $self->code_pos_start('Delta');
   while ($count-- > 0) {
+    $self->code_pos_set;
     my $base = $self->get_gamma();
     last unless defined $base;
-    if ($base == $self->maxbits) {
-      push @vals, ~0;
-    } else {
-      my $val = 1 << $base;
-      $val |= $self->read($base)  if $base > 0;
-      push @vals, $val-1;
+    if    ($base == 0)        { push @vals, 0; }
+    elsif ($base == $maxbits) { push @vals, $self->maxval; }
+    elsif ($base  > $maxbits) { $self->error_code('base', $base); }
+    else {
+      my $remainder = $self->read($base);
+      $self->error_off_stream unless defined $remainder;
+      push @vals, ((1 << $base) | $remainder)-1;
     }
   }
+  $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
 no Mouse::Role;

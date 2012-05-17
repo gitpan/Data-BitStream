@@ -4,7 +4,7 @@ package Data::BitStream;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 # Since we're using Moose/Mouse, things get rather messed up if we try to
 # inherit from Exporter.  Really all we want is the ability to let people
@@ -54,7 +54,7 @@ sub find_code {
     my $rinfo;
     {
       my $pname = 'Data::BitStream::Code::' . $module;
-      no strict 'refs';
+      no strict 'refs';  ## no critic
       $rinfo = ${$pname}{'CODEINFO'};
       next unless defined $rinfo;
       next unless $rinfo =~ s/^\*//;
@@ -119,7 +119,6 @@ sub code_is_universal {
 #
 # A 32-bit HP 9000/785 gave similar results though ~15x slower overall.
 
-use Data::BitStream::WordVec;
 use Mouse;
 if (eval {require Data::BitStream::BLVec}) {
   extends 'Data::BitStream::BLVec';
@@ -172,6 +171,8 @@ __END__
 # ABSTRACT: A bit stream class including integer coding methods
 
 =pod
+
+=encoding utf8
 
 =head1 NAME
 
@@ -595,12 +596,33 @@ Reads/writes one or more values from the stream in Levenstein coding
 
 Reads/writes one or more values from the stream in Even-Rodeh coding.
 
+=item B< get_goldbach_g1([$count]) >
+
+=item B< put_goldbach_g1(@values) >
+
+Reads/writes one or more values from the stream in Goldbach G1 coding.
+
+=item B< get_goldbach_g2([$count]) >
+
+=item B< put_goldbach_g2(@values) >
+
+Reads/writes one or more values from the stream in Goldbach G2 coding.
+
 =item B< get_fib([$count]) >
 
 =item B< put_fib(@values) >
 
 Reads/writes one or more values from the stream in Fibonacci coding.
 Specifically, the order C<m=2> C1 codes of Fraenkel and Klein.
+
+=item B< get_fibgen($m [, $count]) >
+
+=item B< put_fibgen($m, @values) >
+
+Reads/writes one or more values from the stream in generalized Fibonacci
+coding.  The order C<m> should be between 2 and 16.  These codes are
+described in Klein and Ben-Nissan (2004).  For C<m=2> the results are
+identical to the standard C1 form.
 
 =item B< get_fib_c2([$count]) >
 
@@ -610,6 +632,25 @@ Reads/writes one or more values from the stream in Fibonacci C2 coding.
 Specifically, the order C<m=2> C2 codes of Fraenkel and Klein.  Note that
 these codes are not prefix-free, hence they will not mix well with other
 codes in the same stream.
+
+=item B< get_comma($bits [, $count]) >
+
+=item B< put_comma($bits, @values) >
+
+Reads/writes one or more values from the stream in Comma coding.  The number
+of bits C<bits> should be between 1 and 16.  C<bits=1> implies Unary coding.
+C<bits=2> is the ternary comma code.  No leading zeros are used.
+
+=item B< get_blocktaboo($taboo [, $count]) >
+
+=item B< put_blocktaboo($taboo, @values) >
+
+Reads/writes one or more values from the stream in block-based Taboo coding.
+The parameter C<taboo> is the binary string of the taboo code to use, such
+as C<'00'>.  C<taboo='1'> implies Unary coding.  C<taboo='0'> implies Unary1
+coding.  No more than 16 bits of taboo code may be given.
+These codes are a more efficient version of comma codes, as they allow
+leading zeros.
 
 =item B< get_golomb($m [, $count]) >
 
@@ -627,7 +668,7 @@ large outliers.  For example to use Fibonacci coding for the base:
 
   $stream->put_golomb( sub {shift->put_fib(@_)}, $m, $value);
 
-  $value = $stream->put_golomb( sub {shift->get_fib(@_)}, $m);
+  $value = $stream->get_golomb( sub {shift->get_fib(@_)}, $m);
 
 =item B< get_rice($k [, $count]) >
 
@@ -646,7 +687,7 @@ large outliers.  For example to use Omega coding for the base:
 
   $stream->put_rice( sub {shift->put_omega(@_)}, $k, $value);
 
-  $value = $stream->put_rice( sub {shift->get_omega(@_)}, $k);
+  $value = $stream->get_rice( sub {shift->get_omega(@_)}, $k);
 
 =item B< get_gammagolomb($m [, $count]) >
 
@@ -661,6 +702,31 @@ Elias Gamma codes for the base.  This is a convenience since they are common.
 
 Reads/writes one or more values from the stream in Rice coding using
 Elias Gamma codes for the base.  This is a convenience since they are common.
+
+=item B< get_baer($k [, $count]) >
+
+=item B< put_baer($k, @values) >
+
+Reads/writes one or more values from the stream in Baer c_k coding.  The
+parameter C<k> must be between C<-32> and C<32>.
+
+=item B< get_boldivigna($k [, $count]) >
+
+=item B< put_boldivigna($k, @values) >
+
+Reads/writes one or more values from the stream in the Zeta coding of
+Paolo Boldi and Sebastiano Vigna.  The parameter C<k> must be between C<1>
+and C<maxbits> (C<32> or C<64>).  Typical values for C<k> are between C<2>
+and C<6>.
+
+=item B< get_arice(sub { ... }, $k [, $count]) >
+
+=item B< put_arice(sub { ... }, $k, @values) >
+
+Reads/writes one or more values from the stream in Adaptive Rice coding using
+the supplied subroutine instead of Elias Gamma coding to encode the base.
+The value of $k will adapt to better fit the values.  This interface will
+likely change to make C<$k> a reference.
 
 =item B< get_startstop(\@m [, $count]) >
 
@@ -722,6 +788,8 @@ etc.
 
 =item L<Data::BitStream::Code::Fibonacci>
 
+=item L<Data::BitStream::Code::Additive>
+
 =item L<Data::BitStream::Code::Golomb>
 
 =item L<Data::BitStream::Code::Rice>
@@ -736,6 +804,10 @@ etc.
 
 =item L<Data::BitStream::Code::BoldiVigna>
 
+=item L<Data::BitStream::Code::Comma>
+
+=item L<Data::BitStream::Code::Taboo>
+
 =item L<Data::BitStream::Code::ARice>
 
 =back
@@ -746,7 +818,7 @@ Dana Jacobsen <dana@acm.org>
 
 =head1 COPYRIGHT
 
-Copyright 2011 by Dana Jacobsen <dana@acm.org>
+Copyright 2011-2012 by Dana Jacobsen <dana@acm.org>
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 

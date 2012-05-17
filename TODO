@@ -1,14 +1,17 @@
 
-- documentation for text methods (add_code, code_get, code_put, ...)
+- better documentation for text methods (add_code, code_get, code_put, ...)
 
-- tests for invalid behavior
+- documentation for ARice and BLVec
+
 - tests for consistent die return strings
-  - read unary off end of stream
-  - put negative numbers should give "value must be >= 0" for all put_*
-  - write with undefined value
+  x read unary off end of stream
+  x put negative numbers should give "value must be >= 0" for all put_*
+  x write with undefined value
   - put_* with undefined parameters or undef value
   - get_* with undefined parameters
   - put_string with invalid string (e.g. '0012')
+
+- test all open modes, especially write-only
 
 - Export
 
@@ -23,17 +26,29 @@
 - tie to a file to avoid holding everything in memory.
   Either File::Map or PerlIO :mmap or Sys::Mmap
 
+- ARice: use reference for parameter k.
+
+- Documentation for ARice.
+
+- range testing for comma and block taboo codes
+
 CODES:
 
-- m > 2 Fibonacci codes
+- Sayood's NF3 codes (Lossless Compression Handbook pages 67-70).  Generalized
+  Fibonacci code, with terminator change.  Can be a little shorter than the
+  C2 codes, and he claims they're faster to encode/decode.
 
-- Omega ~0
-
-- Ternary Comma
+- Adaptive Golomb.
 
 - Fenwick punctured codes
 
-- Goldbach and Ulam additive codes.  Probably not efficient
-  for anything large.
+- Stout codes
+
+- Yamamoto C(a,f)(n) codes (Yamamoto 2000)
+
+- Pigeon's unconstrained taboo codes.  Described in taboo.ps.  Block codes are
+  done.  Since the unconstrained codes have identical lengths to generalized
+  Fibonacci codes, and these are efficiently implemented here and in XS, I
+  don't think there is a pressing need to do these.
 
 - Thoughts on Huffman, arithmetic

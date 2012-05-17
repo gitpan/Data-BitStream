@@ -18,18 +18,22 @@ done_testing();
 
 
 sub test_encoding {
-  my $encoding = shift;
+  my $tencoding = shift;
 
   plan tests => 2 * scalar @implementations;
 
   foreach my $type (@implementations) {
+    my $encoding = $tencoding;
     my $maxbits = 16;
     my $maxpat  = 0xFFFF;
     if (is_universal($encoding)) {
       my $stream = new_stream($type);
       $maxbits = $stream->maxbits;
-      $maxpat = ~0;
+      $maxpat = ($maxbits == 32)  ?  0xFFFFFFFF  :  ~0;
     }
+
+    # Just in case the stream maxbits is different
+    $encoding =~ s/BinWord\(\d+\)/BinWord($maxbits)/i;
 
     my @data;
     # Note we're not encoding 2^max-1.  The range test does that.

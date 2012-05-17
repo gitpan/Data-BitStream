@@ -11,9 +11,11 @@ lib/Data/BitStream/MinimalVec.pm
 lib/Data/BitStream/String.pm
 lib/Data/BitStream/Vec.pm
 lib/Data/BitStream/WordVec.pm
+lib/Data/BitStream/Code/Additive.pm
 lib/Data/BitStream/Code/ARice.pm
 lib/Data/BitStream/Code/Baer.pm
 lib/Data/BitStream/Code/BoldiVigna.pm
+lib/Data/BitStream/Code/Comma.pm
 lib/Data/BitStream/Code/Delta.pm
 lib/Data/BitStream/Code/Escape.pm
 lib/Data/BitStream/Code/EvenRodeh.pm
@@ -26,6 +28,7 @@ lib/Data/BitStream/Code/Levenstein.pm
 lib/Data/BitStream/Code/Omega.pm
 lib/Data/BitStream/Code/Rice.pm
 lib/Data/BitStream/Code/StartStop.pm
+lib/Data/BitStream/Code/Taboo.pm
 t/01-load.t
 t/02-basic.t
 t/05-coding-01.t
@@ -40,6 +43,9 @@ t/05-coding-09.t
 t/05-coding-10.t
 t/05-coding-11.t
 t/70-failures.t
+t/71-bad_gets.t
+t/72-rand-bad-gets.t
+t/90-release-perlcritic.t
 t/delta_to_fib.t
 t/exporting.t
 t/interleave.t
