@@ -17,9 +17,32 @@ no_index:
   directory:
     - t
     - inc
+optional_features:
+  bitvec:
+    description: 'The Bit::Vector implementation'
+    requires:
+      Bit::Vector: 0
+  mpfs:
+    description: 'Fast primes for Goldbach codes, if Data::BitStream::XS is not available'
+    requires:
+      Math::Prime::FastSieve: 0
+  mpxs:
+    description: 'Fast primes for Goldbach codes, if Data::BitStream::XS is not available'
+    requires:
+      Math::Prime::XS: 0
+  release_testing:
+    description: 'Extra modules for author testing'
+    requires:
+      Test::Kwalitee: 0
+      Test::Perl::Critic: 0
+      Test::Pod: 1.41
+      Test::Pod::Coverage: 1.08
+recommends:
+  Data::BitStream::XS: 0.04
 requires:
   Exporter: 5.57
   Mouse: 0.58
   Mouse::Role: 0.58
   Test::More: 0.94
-version: 0.05
+  perl: 5.006002
+version: 0.06

@@ -4,7 +4,7 @@ package Data::BitStream;
 use strict;
 use warnings;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 # Since we're using Moose/Mouse, things get rather messed up if we try to
 # inherit from Exporter.  Really all we want is the ability to let people
@@ -29,9 +29,9 @@ sub add_code {
   }
   $codeinfo{$name} = $rinfo;
   1;
-}
+};
 
-sub find_code {
+sub _find_code {
   my $code = lc shift;
 
   return $codeinfo{$code} if defined $codeinfo{$code};
@@ -72,18 +72,18 @@ sub find_code {
   }
 
   $codeinfo{$code};
-}
+};
 
 sub code_is_supported {
   my $code = lc shift;
   my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
-  return defined find_code($code);
+  return defined _find_code($code);
 }
 
 sub code_is_universal {
   my $code = lc shift;
   my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
-  my $inforef = find_code($code);
+  my $inforef = _find_code($code);
   return unless defined $inforef;  # Unknown code.
   return $inforef->{'universal'};
 }
@@ -131,7 +131,7 @@ sub code_put {
   my $self = shift;
   my $code = lc shift;
   my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
-  my $inforef = find_code($code);
+  my $inforef = _find_code($code);
   die "Unknown code $code" unless defined $inforef;
   my $sub = $inforef->{'encodesub'};
   die "No encoding sub for code $code!" unless defined $sub;
@@ -148,7 +148,7 @@ sub code_get {
   my $self = shift;
   my $code = lc shift;
   my $param;  $param = $1 if $code =~ s/\((.+)\)$//;
-  my $inforef = find_code($code);
+  my $inforef = _find_code($code);
   die "Unknown code $code" unless defined $inforef;
   my $sub = $inforef->{'decodesub'};
   die "No decoding sub for code $code!" unless defined $sub;
@@ -282,7 +282,13 @@ Michael Baer, the Zeta codes of Boldi and Vigna, and Escape codes.  These,
 and any other codes write or acquire, can be incorporated using
 L<Moose::Meta::Role> as shown above.
 
+
+
+
 =head1 METHODS
+
+
+
 
 =head2 CLASS METHODS
 
@@ -293,7 +299,7 @@ L<Moose::Meta::Role> as shown above.
 Creates a new object.  By default it has no associated file and is mode RW.
 An optional hash of arguments may be supplied.  Examples:
 
-  $stream = Data::BitStream::XS->new( mode => 'ro' );
+  $stream = Data::BitStream->new( mode => 'ro' );
 
 The stream is opened as a read-only stream.  Attempts to open it for write will
 fail, hence all write / put methods will also fail.  This is most useful for
@@ -302,9 +308,9 @@ opening a file for read, which will ensure no changes are made.
 Possible modes include C<'read' / 'r'>, C<'readonly' / 'ro'>, C<'write' / 'w'>,
 C<'writeonly' / 'wo'>, C<'append' / 'a'>, and C<'readwrite' / 'rw' / 'rdwr'>.
 
-  $stream = Data::BitStream::XS->new( file    => "c.bsc",
-                                      fheader => "HEADER $foo $bar",
-                                      mode    => 'w' );
+  $stream = Data::BitStream->new( file    => "c.bsc",
+                                  fheader => "HEADER $foo $bar",
+                                  mode    => 'w' );
 
 A file is associated with the stream.  Upon closing the file, going out of
 scope, or otherwise being destroyed, the stream will be written to the file,
@@ -312,9 +318,9 @@ with the given header string written first.  While the current implementation
 writes at close time, later implementations may write as the stream is written
 to.
 
-  $stream = Data::BitStream::XS->new( file => "c.bsc",
-                                      fheaderlines => 1,
-                                      mode => 'ro' );
+  $stream = Data::BitStream->new( file => "c.bsc",
+                                  fheaderlines => 1,
+                                  mode => 'ro' );
 
 A file is associated with the stream.  The contents of the file will be
 slurped into the stream.  The given number of header lines will be skipped
@@ -354,7 +360,36 @@ likely to be fatal if we ever come across a value of 2 billion.
 
 This method may be exported if requested.
 
+=item B< add_code >
+
+Used for the dispatch table methods C<code_put> and C<code_get> as well as
+other helper methods like C<code_is_universal> and C<code_is_supported>.
+This is typically handled internally, but can be used to register a new code
+or variant.  An example of an Omega-Golomb code:
+
+   Data::BitStream::XS::add_code(
+      { package   => __PACKAGE__,
+        name      => 'OmegaGolomb',
+        universal => 1,
+        params    => 1,
+        encodesub => sub {shift->put_golomb( sub {shift->put_omega(@_)}, @_ )},
+        decodesub => sub {shift->get_golomb( sub {shift->get_omega(@_)}, @_ )},
+      }
+   );
+
+which registers the name C<OmegaGolomb> as a new universal code that takes
+one parameter.  Given a stream C<$stream>, this is now allowed:
+
+   $stream->erase_for_write;
+   $stream->code_put("OmegaGolomb(5)", 477);
+   $stream->rewind_for_read;
+   my $value = $stream->code_get("OmegaGolomb(5)");
+   die unless $value == 477;
+
 =back
+
+
+
 
 =head2 OBJECT METHODS (I<reading>)
 
@@ -395,6 +430,9 @@ error.
 
 =back
 
+
+
+
 =head2 OBJECT METHODS (I<writing>)
 
 These methods are only valid while the stream is in writing state.
@@ -427,6 +465,9 @@ possible ways.  The default implementation uses:
   $self->put_string( $source_stream->to_string );
 
 =back
+
+
+
 
 =head2 OBJECT METHODS (I<conversion>)
 
@@ -465,6 +506,9 @@ will be used as the byte-length.  It is recommended that you include C<$bits>.
 Similar to C<from_raw>, but using the value returned by C<to_store>.
 
 =back
+
+
+
 
 =head2 OBJECT METHODS (I<other>)
 
@@ -521,6 +565,9 @@ A helper function that performs C<erase> followed by C<write_open>.
 A helper function that performs C<write_close> followed by C<rewind>.
 
 =back
+
+
+
 
 =head2 OBJECT METHODS (I<coding>)
 
@@ -768,6 +815,9 @@ etc.
 
 =back
 
+
+
+
 =head1 SEE ALSO
 
 =over 4
@@ -811,6 +861,9 @@ etc.
 =item L<Data::BitStream::Code::ARice>
 
 =back
+
+
+
 
 =head1 AUTHORS
 

@@ -52,7 +52,7 @@ my @encodings;
   Comma(2)
   BinWord(20)
 |;
-@encodings = qw|Unary Gamma Delta Omega Fibonacci GoldbachG1|;
+@encodings = qw|Unary Gamma Delta Omega Fibonacci|;
 
 my $list_n = 2048;
 my @list_small;

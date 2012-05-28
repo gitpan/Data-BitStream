@@ -1,7 +1,7 @@
 
 - better documentation for text methods (add_code, code_get, code_put, ...)
 
-- documentation for ARice and BLVec
+- documentation for BLVec
 
 - tests for consistent die return strings
   x read unary off end of stream
@@ -26,11 +26,12 @@
 - tie to a file to avoid holding everything in memory.
   Either File::Map or PerlIO :mmap or Sys::Mmap
 
-- ARice: use reference for parameter k.
-
-- Documentation for ARice.
+- Better documentation for Additive.
 
 - range testing for comma and block taboo codes
+
+- test for read_open.  Should read_open / write_open be private?  Should they
+  take a hash like new?  (e.g. write_open( file=>'foo') )
 
 CODES:
 
