@@ -21,7 +21,7 @@
    },
    "optional_features" : {
       "bitvec" : {
-         "description" : "The Bit::Vector implementation",
+         "description" : "The Bit::Vector implementation, just for example",
          "prereqs" : {
             "runtime" : {
                "requires" : {
@@ -77,17 +77,26 @@
       },
       "runtime" : {
          "recommends" : {
-            "Data::BitStream::XS" : "0.04"
+            "Data::BitStream::XS" : "0.06"
          },
          "requires" : {
+            "Carp" : "0",
+            "Class::XSAccessor" : "0",
             "Exporter" : "5.57",
-            "Mouse" : "0.58",
-            "Mouse::Role" : "0.58",
+            "Moo" : "1.000006",
+            "Moo::Role" : "0",
+            "MooX::Types::MooseLike" : "0",
             "Test::More" : "0.94",
             "perl" : "5.006002"
          }
       }
    },
    "release_status" : "stable",
-   "version" : "0.06"
+   "resources" : {
+      "homepage" : "https://github.com/danaj/BitStream/tree",
+      "repository" : {
+         "url" : "git://github.com/danaj/BitStream.git"
+      }
+   },
+   "version" : "0.07"
 }

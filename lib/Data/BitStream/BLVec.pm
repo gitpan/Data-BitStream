@@ -8,7 +8,8 @@ BEGIN {
   $Data::BitStream::BLVec::VERSION   = '0.02';
 }
 
-use Mouse;
+use Moo;
+use MooX::Types::MooseLike::Base qw/InstanceOf/;
 
 with 'Data::BitStream::Base',
      'Data::BitStream::Code::Gamma',
@@ -27,12 +28,14 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Additive',
      'Data::BitStream::Code::Comma',
      'Data::BitStream::Code::Taboo',
+     'Data::BitStream::Code::BER',
+     'Data::BitStream::Code::Varint',
      'Data::BitStream::Code::StartStop';
 
 use Data::BitStream::XS 0.04;
 
 has '_vec' => (is => 'rw',
-               isa => 'Data::BitStream::XS',
+               isa => InstanceOf['Data::BitStream::XS'],
                default => sub { return Data::BitStream::XS->new });
 
 # Force our pos and len sets to also set the XS object
@@ -225,7 +228,7 @@ sub put_stream {
 # default everything else
 
 __PACKAGE__->meta->make_immutable;
-no Mouse;
+no Moo;
 1;
 
 # ABSTRACT: An XS-wrapper implementation of Data::BitStream
@@ -256,7 +259,7 @@ which is of limited value to people purely using L<Data::BitStream>.
 This implementation points everything to the implementations in
 Data::BitStream::XS where possible.  This gives the majority of the performance
 benefit of the XS module, while (1) transparently applying the speedup through
-the Data::BitStream package, and (2) allowing all the Mouse/Moose extensions
+the Data::BitStream package, and (2) allowing all the Moo/Mouse/Moose extensions
 and extra roles to be used while still retaining high performance at the core.
 
 This is the default L<Data::BitStream> implementation if Data::BitStream::XS

@@ -30,24 +30,25 @@ our $CODEINFO = [ { package   => __PACKAGE__,
                   },
                 ];
 
-use Mouse::Role;
+use Moo::Role;
+use MooX::Types::MooseLike::Base qw/Int Bool Str ArrayRef/;
 
 # pos is ignored while writing
-has 'pos'     => (is => 'ro', isa => 'Int', writer => '_setpos', default => 0);
-has 'len'     => (is => 'ro', isa => 'Int', writer => '_setlen', default => 0);
-has 'mode'    => (is => 'rw', default => 'rdwr');
+has 'pos'     => (is => 'ro', writer => '_setpos', default => sub{0});
+has 'len'     => (is => 'ro', writer => '_setlen', default => sub{0});
+has 'mode'    => (is => 'rw', default => sub{'rdwr'});
 has '_code_pos_array' => (is => 'rw',
-                          isa => 'ArrayRef[Int]',
+                          isa => ArrayRef[Int],
                           default => sub {[]} );
 has '_code_str_array' => (is => 'rw',
-                          isa => 'ArrayRef[Str]',
+                          isa => ArrayRef[Str],
                           default => sub {[]} );
 
 has 'file'         => (is => 'ro', writer => '_setfile');
 has 'fheader'      => (is => 'ro', writer => '_setfheader');
 has 'fheaderlines' => (is => 'ro');
 
-has 'writing' => (is => 'ro', isa => 'Bool',writer => '_setwrite', default=>1);
+has 'writing' => (is => 'ro', isa => Bool, writer => '_setwrite', default => sub {1});
 
 # Useful for testing, but time consuming.  Not so bad now that all the test
 # suites call put_*  ~30 times with a list instead of per-value ~30,000 times.
@@ -66,24 +67,25 @@ sub BUILD {
   my $self = shift;
 
   # Change mode to canonical form
-  my $mode = $self->mode;
-  my $writing;
-  if    ($mode eq 'read')      { $mode = 'r'; }
-  elsif ($mode eq 'readonly')  { $mode = 'ro'; }
-  elsif ($mode eq 'write')     { $mode = 'w'; }
-  elsif ($mode eq 'writeonly') { $mode = 'wo'; }
-  elsif ($mode eq 'readwrite') { $mode = 'rw'; }
-  elsif ($mode eq 'rdwr')      { $mode = 'rw'; }
-  elsif ($mode eq 'append')    { $mode = 'a'; }
-  die "Unknown mode: $mode" unless $mode =~ /^(?:r|ro|w|wo|rw|a)$/;
+  my $curmode = $self->mode;
+  my $is_writing;
+  if    ($curmode eq 'read')      { $curmode = 'r'; }
+  elsif ($curmode eq 'readonly')  { $curmode = 'ro'; }
+  elsif ($curmode eq 'write')     { $curmode = 'w'; }
+  elsif ($curmode eq 'writeonly') { $curmode = 'wo'; }
+  elsif ($curmode eq 'readwrite') { $curmode = 'rw'; }
+  elsif ($curmode eq 'rdwr')      { $curmode = 'rw'; }
+  elsif ($curmode eq 'append')    { $curmode = 'a'; }
+  die "Unknown mode: $curmode" unless $curmode =~ /^(?:r|ro|w|wo|rw|a)$/;
+  $self->mode( $curmode );
 
   # Set writing based on mode
-  if    ($mode =~ /^ro?$/) { $writing = 0; }
-  elsif ($mode =~ /^wo?$/) { $writing = 1; }
-  elsif ($mode eq 'rw')    { $writing = 1; }
-  elsif ($mode eq 'a')     { $writing = 0; }
+  if    ($curmode =~ /^ro?$/) { $is_writing = 0; }
+  elsif ($curmode =~ /^wo?$/) { $is_writing = 1; }
+  elsif ($curmode eq 'rw')    { $is_writing = 1; }
+  elsif ($curmode eq 'a')     { $is_writing = 0; }
 
-  if ($writing) {
+  if ($is_writing) {
     $self->_setwrite(1);
     $self->write_open;
   } else {
@@ -91,7 +93,7 @@ sub BUILD {
     $self->read_open;
   }
 
-  $self->write_open if $mode eq 'a';
+  $self->write_open if $curmode eq 'a';
   # TODO: writeonly doesn't really work
 }
 
@@ -100,8 +102,9 @@ sub DEMOLISH {
   $self->write_close if $self->writing;
 }
 
-my $_host_word_size;
-my $_all_ones;
+my $_host_word_size;    # maxbits
+my $_all_ones;          # maxval
+
 BEGIN {
   use Config;
   $_host_word_size =
@@ -135,8 +138,12 @@ BEGIN {
 
   $_all_ones = ($_host_word_size == 32) ? 0xFFFFFFFF : ~0;
 }
-use constant maxbits => $_host_word_size;
-use constant maxval  => $_all_ones;
+# Moo 1.000007 doesn't allow inheritance of 'use constant'.
+#use constant maxbits => $_host_word_size;
+#use constant maxval  => $_all_ones;
+# Use a sub with empty prototype (see perlsub documentation)
+sub maxbits () { $_host_word_size }  ## no critic (ProhibitSubroutinePrototypes)
+sub maxval  () { $_all_ones }        ## no critic (ProhibitSubroutinePrototypes)
 
 sub rewind {
   my $self = shift;
@@ -185,7 +192,7 @@ sub read_open {
     }
     binmode $fp;
     # Turn off file linking while calling from_raw
-    my $mode = $self->mode;
+    my $saved_mode = $self->mode;
     $self->_setfile( undef );
     $self->mode( 'rw' );
     my $bits = <$fp>;
@@ -196,7 +203,7 @@ sub read_open {
     close $fp;
     # link us back.
     $self->_setfile( $file );
-    $self->mode( $mode );
+    $self->mode( $saved_mode );
   }
   1;
 }
@@ -466,12 +473,12 @@ sub put_unary1 {
     $self->error_code('zeroval') unless defined $val and $val >= 0;
     warn "Trying to write large unary value ($val)" if $val > 10_000_000;
     if ($val < maxbits) {
-      $self->write($val+1, maxval << 1);
+      $self->write($val+1, maxval() << 1);
     } else {
       my $nbits  = $val % maxbits;
-      my $nwords = ($val-$nbits) / maxbits;
+      my $nwords = ($val-$nbits) / maxbits();
       $self->write(maxbits, maxval)  for (1 .. $nwords);
-      $self->write($nbits+1, maxval << 1);
+      $self->write($nbits+1, maxval() << 1);
     }
   }
   1;
@@ -735,7 +742,7 @@ sub _dec_to_bin {
   }
 }
 
-no Mouse::Role;
+no Moo::Role;
 1;
 
 
@@ -749,7 +756,7 @@ Data::BitStream::Base - A Role implementing the API for Data::BitStream
 
 =head1 SYNOPSIS
 
-  use Mouse;
+  use Moo;
   with 'Data::BitStream::Base';
 
 =head1 DESCRIPTION
@@ -786,7 +793,7 @@ reading.  Methods for read such as
 C<read>, C<get>, C<skip>, C<rewind>, C<skip>, and C<exhausted>
 are not allowed while writing.  Methods for write such as
 C<write> and C<put>
-are not allowed while reading.  
+are not allowed while reading.
 
 The C<write_open> and C<erase_for_write> methods will set writing to true.
 The C<write_close> and C<rewind_for_read> methods will set writing to false.
@@ -794,6 +801,31 @@ The C<write_close> and C<rewind_for_read> methods will set writing to false.
 The read/write distinction allows implementations more freedom in internal
 caching of data.  For instance, they can gather writes into blocks.  It also
 can be helpful in catching mistakes such as reading from a target stream.
+
+=item B< mode >
+
+The stream mode.  Especially useful when given a file.  The mode may be one of
+
+  r    (read)
+  ro   (readonly)
+  w    (write)
+  wo   (writeonly)
+  rdwr (readwrite)
+  a    (append)
+
+=item B< file >
+
+The name of a file to read or write (depending on the mode).
+
+=item B< fheaderlines >
+
+Only applicible when reading a file.  Indicates how many header lines exist
+before the data.
+
+=item B< fheader >
+
+When writing a file, this is the header to write before the data.
+When reading a file, this will be set to the header, if fheaderlines was given.
 
 =back
 
@@ -899,7 +931,7 @@ These methods are only valid while the stream is in writing state.
 
 =item B< write($bits, $value) >
 
-Writes C<$value> to the stream using C<$bits> bits.  
+Writes C<$value> to the stream using C<$bits> bits.
 C<$bits> must be between C<1> and C<maxbits>, unless C<value> is 0 or 1, in
 which case C<bits> may be larger than C<maxbits>.
 

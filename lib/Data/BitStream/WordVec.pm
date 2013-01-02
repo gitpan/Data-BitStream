@@ -8,7 +8,7 @@ BEGIN {
   $Data::BitStream::WordVec::VERSION = '0.03';
 }
 
-use Mouse;
+use Moo;
 
 with 'Data::BitStream::Base',
      'Data::BitStream::Code::Gamma',
@@ -27,9 +27,11 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Additive',
      'Data::BitStream::Code::Comma',
      'Data::BitStream::Code::Taboo',
+     'Data::BitStream::Code::BER',
+     'Data::BitStream::Code::Varint',
      'Data::BitStream::Code::StartStop';
 
-has '_vec' => (is => 'rw', default => '');
+has '_vec' => (is => 'rw', default => sub{''});
 
 # Access the raw vector.
 sub _vecref {
@@ -230,7 +232,7 @@ sub put_gamma {
 
   my $len  = $self->len;
   my $rvec = $self->_vecref;
-  my $maxval = $self->maxval;
+  my $maxval = $self->maxval();
 
   foreach my $val (@_) {
     $self->error_code('zeroval') unless defined $val and $val >= 0;
@@ -342,6 +344,11 @@ sub put_string {
       my $newvec = pack("B*", substr($str, 0, $first_bits) );
       vec($$rvec, $wpos++, 32) |= vec($newvec, 0, 32) >> $bpos;
       $bits_to_write -= $first_bits;
+    } else {
+      # The fast part below does a string concat, which means we have to
+      # make sure the vector is extended properly.  This happens if we have
+      # written zeros with the write() method, which just extends $len.
+      vec($$rvec, $wpos-1, 32) |= 0  if $wpos > 0;
     }
     # Now put the rest of the string in place quickly.
     if ($bits_to_write > 0) {
@@ -407,7 +414,7 @@ sub from_raw {
 }
 
 __PACKAGE__->meta->make_immutable;
-no Mouse;
+no Moo;
 1;
 
 # ABSTRACT: A Vector-32 implementation of Data::BitStream

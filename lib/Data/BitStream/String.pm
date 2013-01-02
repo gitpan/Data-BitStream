@@ -8,7 +8,7 @@ BEGIN {
   $Data::BitStream::String::VERSION = '0.02';
 }
 
-use Mouse;
+use Moo;
 
 with 'Data::BitStream::Base',
      'Data::BitStream::Code::Gamma',  # implemented here
@@ -27,9 +27,11 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Additive',
      'Data::BitStream::Code::Comma',
      'Data::BitStream::Code::Taboo',
+     'Data::BitStream::Code::BER',
+     'Data::BitStream::Code::Varint',
      'Data::BitStream::Code::StartStop';
 
-has '_str' => (is => 'rw', default => '');
+has '_str' => (is => 'rw', default => sub{''});
 
 # Evil, reference to underlying string
 sub _strref {
@@ -202,7 +204,7 @@ sub put_gamma {
 
   my $rstr = $self->_strref;
   my $len = $self->len;
-  my $maxval = $self->maxval;
+  my $maxval = $self->maxval();
 
   foreach my $val (@_) {
     $self->error_code('zeroval') unless defined $val and $val >= 0;
@@ -251,7 +253,7 @@ sub get_gamma {
     my $base = $onepos - $pos;
     $pos = $onepos + 1;
     if    ($base == 0) {  push @vals, 0; }
-    elsif ($base == $maxbits) { push @vals, $self->maxval; }
+    elsif ($base == $maxbits) { push @vals, $self->maxval(); }
     elsif ($base  > $maxbits) { $self->error_code('base', $base); }
     else  {
       $self->error_off_stream() if ($pos+$base) > $len;
@@ -365,7 +367,7 @@ sub put_raw {
 #}
 
 __PACKAGE__->meta->make_immutable;
-no Mouse;
+no Moo;
 1;
 
 # ABSTRACT: A String implementation of Data::BitStream

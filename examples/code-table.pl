@@ -2,14 +2,13 @@
 use strict;
 use warnings;
 use FindBin;  use lib "$FindBin::Bin/../lib";
+use Moo::Role qw/apply_roles_to_object/;
 use Data::BitStream;
-use Data::BitStream::Code::BoldiVigna;
 use Data::BitStream::Code::Escape;
 
 sub new_stream {
   my $stream = Data::BitStream->new();
-  Data::BitStream::Code::BoldiVigna->meta->apply($stream);
-  Data::BitStream::Code::Escape->meta->apply($stream);
+  Moo::Role->apply_roles_to_object($stream, qw/Data::BitStream::Code::Escape/);
   return $stream;
 }
 
@@ -27,12 +26,14 @@ sub string_of {
   elsif ($encoding eq 'lev')    { $stream->put_levenstein($d);     }
   elsif ($encoding =~ /bvzeta/) { $stream->put_boldivigna($p, $d); }
   elsif ($encoding =~ /baer/)   { $stream->put_baer($p, $d); }
+  elsif ($encoding =~ /ber/)    { $stream->put_BER($p, $d); }
   elsif ($encoding =~ /escape/) { $stream->put_escape([split('-',$p)],$d); }
   elsif ($encoding =~ /sss/)    {$stream->put_startstepstop([split('-',$p)],$d)}
   elsif ($encoding =~ /ss/)     { $stream->put_startstop([split('-',$p)],$d); }
   elsif ($encoding =~ /eg/)     { $stream->put_expgolomb($p, $d);  }
   elsif ($encoding =~ /gol/)    { $stream->put_golomb($p, $d);     }
   elsif ($encoding =~ /rice/)   { $stream->put_rice($p, $d);       }
+  elsif ($encoding =~ /varint/) { $stream->put_varint($p, $d);     }
   else  { die "Unknown encoding: $encoding"; }
   my $str = $stream->to_string();
   $str;

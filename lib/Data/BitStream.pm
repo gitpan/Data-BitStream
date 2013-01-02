@@ -1,12 +1,12 @@
 package Data::BitStream;
-# I have tested with 5.8.9 through 5.15.3.
-# I was unable to install Mouse on 5.8.0 so could not test with that.
+# I have tested with 5.6.2 through 5.17.7 using Mouse.
+# Moo requires perl 5.8.1, Moose requires 5.8.3.
 use strict;
 use warnings;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
-# Since we're using Moose/Mouse, things get rather messed up if we try to
+# Since we're using Moo, things get rather messed up if we try to
 # inherit from Exporter.  Really all we want is the ability to let people
 # use a couple convenience functions, so just grab the import method.
 use Exporter qw(import);
@@ -119,7 +119,7 @@ sub code_is_universal {
 #
 # A 32-bit HP 9000/785 gave similar results though ~15x slower overall.
 
-use Mouse;
+use Moo;
 if (eval {require Data::BitStream::BLVec}) {
   extends 'Data::BitStream::BLVec';
 } else {
@@ -162,7 +162,7 @@ sub code_get {
 }
 
 __PACKAGE__->meta->make_immutable;
-no Mouse;
+no Moo;
 
 1;
 __END__
@@ -174,9 +174,16 @@ __END__
 
 =encoding utf8
 
+
 =head1 NAME
 
 Data::BitStream - A bit stream class including integer coding methods
+
+
+=head1 VERSION
+
+version 0.07
+
 
 =head1 SYNOPSIS
 
@@ -188,11 +195,11 @@ Data::BitStream - A bit stream class including integer coding methods
 
 See the examples for more uses.
 
+
 =head1 DESCRIPTION
 
-A Mouse/Moose class providing read/write access to bit streams.  This includes
-many integer coding methods as well as straightforward ways to implement new
-codes.
+A Moo class providing read/write access to bit streams.  This includes many
+integer coding methods as well as straightforward ways to implement new codes.
 
 Bit streams are often used in data compression and in embedded products where
 memory is at a premium.  While this Perl implementation may not be appropriate
@@ -267,8 +274,12 @@ bias estimations and adaptive determination of the parameter for Rice coding.
   use Data::BitStream::Code::BoldiVigna;
 
   my $stream = Data::BitStream->new;
+  # Moose:
   Data::BitStream::Code::Baer->meta->apply($stream);
   Data::BitStream::Code::BoldiVigna->meta->apply($stream);
+  # Moo:
+  Moo::Role->apply_roles_to_object($stream,
+     qw/Data::BitStream::Code::Baer Data::BitStream::Code::BoldiVigna/);
 
   $stream->put_baer(-1, 14);      # put 14 as a Baer c-1 code
   $stream->put_boldivigna(2, 7);  # put 7 as a Zeta(2) code
@@ -280,7 +291,7 @@ bias estimations and adaptive determination of the parameter for Rice coding.
 Not all codes are included by default, including the power-law codes of
 Michael Baer, the Zeta codes of Boldi and Vigna, and Escape codes.  These,
 and any other codes write or acquire, can be incorporated using
-L<Moose::Meta::Role> as shown above.
+L<Moo::Role> or the Moose MOP as shown above.
 
 
 
@@ -441,7 +452,7 @@ These methods are only valid while the stream is in writing state.
 
 =item B< write($bits, $value) >
 
-Writes C<$value> to the stream using C<$bits> bits.  
+Writes C<$value> to the stream using C<$bits> bits.
 C<$bits> must be between C<1> and C<maxbits>, unless C<value> is 0 or 1, in
 which case C<bits> may be larger than C<maxbits>.
 
@@ -533,7 +544,7 @@ reading.  Methods for read such as
 C<read>, C<get>, C<skip>, C<rewind>, C<skip>, and C<exhausted>
 are not allowed while writing.  Methods for write such as
 C<write> and C<put>
-are not allowed while reading.  
+are not allowed while reading.
 
 The C<write_open> and C<erase_for_write> methods will set writing to true.
 The C<write_close> and C<rewind_for_read> methods will set writing to false.
@@ -820,6 +831,13 @@ etc.
 
 =head1 SEE ALSO
 
+The L<Data::Buffer> module has some similarities, and may be easier to use if
+your structure maps directly to typical C structs.  The main feature it has
+that isn't replicated here is the template functionality.  The primary
+difference is L<Data::BitStream> allows arbitrary bit lengths (it isn't byte
+oriented), and of course all the different codes.  It also allows direct
+storage of 64-bit integers, and bigints (using binary strings).
+
 =over 4
 
 =item L<Data::BitStream::Base>
@@ -871,7 +889,7 @@ Dana Jacobsen <dana@acm.org>
 
 =head1 COPYRIGHT
 
-Copyright 2011-2012 by Dana Jacobsen <dana@acm.org>
+Copyright 2011-2013 by Dana Jacobsen <dana@acm.org>
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 

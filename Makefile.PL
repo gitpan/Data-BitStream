@@ -12,16 +12,32 @@ WriteMakefile1(
                      'Test::More'       => '0.94',
                      # Using just the import method of Exporter
                      'Exporter'         => '5.57',
-                     # I normally use 0.93, but tested with RHEL6's 0.58
-                     'Mouse'            => '0.58',
-                     'Mouse::Role'      => '0.58',
+                     'Carp'             => 0,
+
+                     # This module used to use Mouse:
+                     # 'Mouse'            => '0.58',
+                     # 'Mouse::Role'      => '0.58',
+                     # Then we tied Moose (2.0205 - 2.0602):
+                     # 'Moose'            => 0,
+                     # 'Moose::Role'      => 0,
+                     # 'MooseX::Types::Moose' => 0,
+                     # And now Moo.
+                      'Moo'                    => 1.000006,
+                      'Moo::Role'              => 0,
+                      'MooX::Types::MooseLike' => 0,
+                     # Technically not needed, but big performance help
+                      'Class::XSAccessor'      => 0,
                  },
 
     META_MERGE => {
-                    recommends => { 'Data::BitStream::XS' => 0.04, },
+                    resources  => {
+                      homepage   => 'https://github.com/danaj/BitStream/tree',
+                      repository => 'git://github.com/danaj/BitStream.git',
+                    },
+                    recommends => { 'Data::BitStream::XS' => 0.06, },
                     optional_features => {
                           bitvec =>  {
-                              description => 'The Bit::Vector implementation',
+                              description => 'The Bit::Vector implementation, just for example',
                               requires => { 'Bit::Vector' => 0, },
                           },
                           mpxs =>  {

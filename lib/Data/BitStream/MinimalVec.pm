@@ -6,7 +6,7 @@ BEGIN {
   $Data::BitStream::MinimalVec::VERSION   = '0.02';
 }
 
-use Mouse;
+use Moo;
 
 with 'Data::BitStream::Base',
      'Data::BitStream::Code::Gamma',
@@ -25,9 +25,11 @@ with 'Data::BitStream::Base',
      'Data::BitStream::Code::Additive',
      'Data::BitStream::Code::Comma',
      'Data::BitStream::Code::Taboo',
+     'Data::BitStream::Code::BER',
+     'Data::BitStream::Code::Varint',
      'Data::BitStream::Code::StartStop';
 
-has '_vec' => (is => 'rw', default => '');
+has '_vec' => (is => 'rw', default => sub{''});
 
 sub _vecref { \shift->{_vec} }
 after 'erase' => sub { shift->_vec(''); 1; };
@@ -84,7 +86,7 @@ sub write {
 # default everything else
 
 __PACKAGE__->meta->make_immutable;
-no Mouse;
+no Moo;
 1;
 
 # ABSTRACT: A minimal implementation of Data::BitStream

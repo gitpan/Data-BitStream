@@ -31,7 +31,7 @@ sub _dec_to_bin_er {
   }
 }
 
-use Mouse::Role;
+use Moo::Role;
 requires qw(read write put_string);
 
 # Even-Rodeh code
@@ -90,7 +90,7 @@ sub get_evenrodeh {
   $self->code_pos_end;
   wantarray ? @vals : $vals[-1];
 }
-no Mouse::Role;
+no Moo::Role;
 1;
 
 # ABSTRACT: A Role implementing Even-Rodeh codes
@@ -151,7 +151,7 @@ These methods are required for the role.
 
 =over 4
 
-=item S. Even, M. Rodeh, “Economical Encoding of Commas Between Strings”, Comm ACM, Vol 21, No 4, pp 315–317, April 1978.
+=item S. Even, M. Rodeh, "Economical Encoding of Commas Between Strings", Comm ACM, Vol 21, No 4, pp 315-317, April 1978.
 
 =item Peter Fenwick, "Punctured Elias Codes for variable-length coding of the integers", Technical Report 137, Department of Computer Science, University of Auckland, December 1996
 
