@@ -4,7 +4,7 @@ use warnings;
 use Carp;
 BEGIN {
   $Data::BitStream::Base::AUTHORITY = 'cpan:DANAJ';
-  $Data::BitStream::Base::VERSION   = '0.03';
+  $Data::BitStream::Base::VERSION   = '0.08';
 }
 
 our $CODEINFO = [ { package   => __PACKAGE__,
@@ -65,6 +65,14 @@ has 'writing' => (is => 'ro', isa => Bool, writer => '_setwrite', default => sub
 
 sub BUILD {
   my $self = shift;
+
+  # Looks like some systems aren't setting these correctly via the default.
+  # I cannot reproduce the issue even with the same versions of Perl, Moo,
+  # and Class::XSAccessor.  So, we'll set them here.
+  $self->_code_pos_array([]);
+  $self->_code_str_array([]);
+  $self->_setpos(0);
+  $self->_setlen(0);
 
   # Change mode to canonical form
   my $curmode = $self->mode;

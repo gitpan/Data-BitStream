@@ -4,7 +4,7 @@
       "Dana A Jacobsen <dana@acm.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 6.6302, CPAN::Meta::Converter version 2.120630",
+   "generated_by" : "ExtUtils::MakeMaker version 6.98, CPAN::Meta::Converter version 2.140640",
    "license" : [
       "perl_5"
    ],
@@ -30,22 +30,12 @@
             }
          }
       },
-      "mpfs" : {
+      "mpu" : {
          "description" : "Fast primes for Goldbach codes, if Data::BitStream::XS is not available",
          "prereqs" : {
             "runtime" : {
                "requires" : {
-                  "Math::Prime::FastSieve" : "0"
-               }
-            }
-         }
-      },
-      "mpxs" : {
-         "description" : "Fast primes for Goldbach codes, if Data::BitStream::XS is not available",
-         "prereqs" : {
-            "runtime" : {
-               "requires" : {
-                  "Math::Prime::XS" : "0"
+                  "Math::Prime::Util" : "0"
                }
             }
          }
@@ -67,7 +57,8 @@
    "prereqs" : {
       "build" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : "0"
+            "ExtUtils::MakeMaker" : "0",
+            "Test::More" : "0.94"
          }
       },
       "configure" : {
@@ -76,9 +67,6 @@
          }
       },
       "runtime" : {
-         "recommends" : {
-            "Data::BitStream::XS" : "0.06"
-         },
          "requires" : {
             "Carp" : "0",
             "Class::XSAccessor" : "0",
@@ -86,17 +74,13 @@
             "Moo" : "1.000006",
             "Moo::Role" : "0",
             "MooX::Types::MooseLike" : "0",
-            "Test::More" : "0.94",
             "perl" : "5.006002"
          }
       }
    },
    "release_status" : "stable",
    "resources" : {
-      "homepage" : "https://github.com/danaj/BitStream/tree",
-      "repository" : {
-         "url" : "git://github.com/danaj/BitStream.git"
-      }
+      "homepage" : "https://github.com/danaj/BitStream"
    },
-   "version" : "0.07"
+   "version" : "0.08"
 }

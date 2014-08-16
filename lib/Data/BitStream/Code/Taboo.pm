@@ -3,7 +3,7 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Taboo::AUTHORITY = 'cpan:DANAJ';
-  $Data::BitStream::Code::Taboo::VERSION = '0.01';
+  $Data::BitStream::Code::Taboo::VERSION = '0.08';
 }
 
 our $CODEINFO = { package   => __PACKAGE__,
@@ -146,7 +146,7 @@ Data::BitStream::Code::Taboo - A Role implementing Taboo codes
 
 =head1 VERSION
 
-version 0.01
+version 0.08
 
 =head1 DESCRIPTION
 
@@ -157,7 +157,7 @@ Taboo codes are described in Steven Pigeon's 2001 PhD Thesis as well as his
 paper "Taboo Codes: New Classes of Universal Codes."
 
 The block methods implement a slight modification of the taboo codes, wherein
-zero is encoded as the taboo pattern with no preceeding bits.  This causes no
+zero is encoded as the taboo pattern with no preceding bits.  This causes no
 loss of generality and lowers the bit count for small values.
 
 An example using '11' as the taboo pattern (chunk size C<n=2>):
@@ -181,7 +181,7 @@ generalized Fibonacci codes are a special case of taboo codes (using a taboo
 pattern of all ones and a different bit ordering).  The lengths of the codes
 will be identical in all cases, so it is recommended to use them if possible.
 What unconstrained taboo codes offer over generalized Fibonacci codes is the
-ability to have any ending pattern and having the prefix be lexigraphically
+ability to have any ending pattern and having the prefix be lexicographically
 ordered.  For most purposes these are not important.
 
 =head1 METHODS

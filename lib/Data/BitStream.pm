@@ -4,7 +4,7 @@ package Data::BitStream;
 use strict;
 use warnings;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 # Since we're using Moo, things get rather messed up if we try to
 # inherit from Exporter.  Really all we want is the ability to let people
@@ -182,30 +182,52 @@ Data::BitStream - A bit stream class including integer coding methods
 
 =head1 VERSION
 
-version 0.07
+version 0.08
 
 
 =head1 SYNOPSIS
 
   use Data::BitStream;
   my $stream = Data::BitStream->new;
-  $stream->put_gamma($_) for (1 .. 20);
+  $stream->put_gamma($_) for 1 .. 20;
+  printf "20 numbers stored in %.2f bits each\n", $stream->len / 20;
   $stream->rewind_for_read;
   my @values = $stream->get_gamma(-1);
 
+  $stream->erase_for_write;         # Clear the stream and open for write
+  my @data = map { int(1000/$_) } 1..1000;  # Make some data
+  my $k = 2;
+  $stream->put_arice($k, @data);    # Store with adaptive Rice coding
+  printf "1000 numbers stored in %.2f bits each\n", $stream->len / 1000;
+  
 See the examples for more uses.
 
 
 =head1 DESCRIPTION
 
-A Moo class providing read/write access to bit streams.  This includes many
-integer coding methods as well as straightforward ways to implement new codes.
+A Moo class providing read/write access to bit streams including support
+for numerous variable length codes.  Adding new codes as roles is easily done.
+An adaptive code (ARice) is included that typically will use fewer bits on
+most inputs than fixed codes.
 
 Bit streams are often used in data compression and in embedded products where
-memory is at a premium.  While this Perl implementation may not be appropriate
-for many of these applications (speed and Perl), it can be very useful for
-prototyping and experimenting with different codes.  A future implementation
-using XS for internals may resolve some performance concerns.
+memory is at a premium.  Using variable length codes allows high performance
+compression of integer data.  Common codes such as fixed-bit-length, unary,
+gamma, delta, Golomb, and Rice codes are included, as well as many
+interesting other codes such as Levenstein, Even-Rodeh,
+Fibonacci C1 and C2, generalized Fibonacci, and Goldbach codes to name
+a few.  Flexible codes such as Comma, Taboo, Start-Stop codes are also
+implemented.
+
+One common application is lossless image compression, where a predictor turns
+each pixel into a small error term, which can then be efficiently encoded.
+Another application is storing opcodes that have a very uneven distribution
+(e.g. some opcodes are very common, some are uncommon).
+
+For higher performance, the L<Data::BitStream::XS> module can be installed,
+which will speed up operation of this module greatly.  It may also be used
+directly if the absolute best speed must be obtained, although that bypasses
+Moo/Moose and hence will not allow custom roles.
 
 
 =head1 EXAMPLES
@@ -238,11 +260,11 @@ using XS for internals may resolve some performance concerns.
     # will use one or more previous values to estimate the current one.
     my $p = predict($v);
     # determine the signed difference.
-    my $diff = $v - $p;
+    my $delta = $v - $p;
     # Turn this into an absolute difference suitable for coding.
-    my $error = ($diff < 0)  ?  -2*$diff  :  2*$diff-1;
+    $delta = ($delta >= 0)  ?  2*$delta  :  -2*$delta-1;
     # Encode this using gamma encoding (or whichever works best for you).
-    $stream->put_gamma($error);
+    $stream->put_gamma($delta);
   }
   # Nicely packed up compressed data.
   my $compressed_data = $stream->to_raw;
@@ -270,35 +292,37 @@ bias estimations and adaptive determination of the parameter for Rice coding.
 =head2 Using a custom encoding method
 
   use Data::BitStream;
-  use Data::BitStream::Code::Baer;
-  use Data::BitStream::Code::BoldiVigna;
+  Moo::Role->apply_roles_to_package('Data::BitStream',
+     qw/Data::BitStream::Code::Escape/);
 
   my $stream = Data::BitStream->new;
-  # Moose:
-  Data::BitStream::Code::Baer->meta->apply($stream);
-  Data::BitStream::Code::BoldiVigna->meta->apply($stream);
-  # Moo:
-  Moo::Role->apply_roles_to_object($stream,
-     qw/Data::BitStream::Code::Baer Data::BitStream::Code::BoldiVigna/);
-
-  $stream->put_baer(-1, 14);      # put 14 as a Baer c-1 code
-  $stream->put_boldivigna(2, 7);  # put 7 as a Zeta(2) code
-
+  $stream->put_escape([4,7], 14, 28, 42, 56);   # Add four values
   $stream->rewind_for_read;
-  my $v1 = $stream->get_baer(-1);
-  my $v2 = $stream->get_boldivigna(2);
+  my @values = $stream->get_escape([4,7], -1);
 
-Not all codes are included by default, including the power-law codes of
-Michael Baer, the Zeta codes of Boldi and Vigna, and Escape codes.  These,
-and any other codes write or acquire, can be incorporated using
-L<Moo::Role> or the Moose MOP as shown above.
+The escape code is not included by default, so this shows how we can add it
+to the package.  You can also use C<Moo::Role->apply_roles_to_object> and
+give it a stream object as the first argument, which will apply the role
+just to the single stream.  Alternately, if you have Moose, you can use
+C<Data::BitStream::Code::Escape->meta->apply($stream);> or other MOP
+operations.
+
+Note that if we used the text interface we don't have to do this, as the
+Escape module includes code info that the L<Data::BitStream> module will
+find by default.  This involves an extra lookup to find the method, but
+is convenient:
+
+  use Data::BitStream;
+  use Data::BitStream::Code::Escape;
+  my $stream = Data::BitStream->new;
+  $stream->code_put("Escape(4-7)", 14, 28, 42, 56);
+  $stream->rewind_for_read;
+  my @values = $stream->code_get("Escape(4-7)", -1);
 
 
 
 
 =head1 METHODS
-
-
 
 
 =head2 CLASS METHODS
@@ -889,7 +913,7 @@ Dana Jacobsen <dana@acm.org>
 
 =head1 COPYRIGHT
 
-Copyright 2011-2013 by Dana Jacobsen <dana@acm.org>
+Copyright 2011-2014 by Dana Jacobsen <dana@acm.org>
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 

@@ -3,15 +3,15 @@ use strict;
 use warnings;
 BEGIN {
   $Data::BitStream::Code::Escape::AUTHORITY = 'cpan:DANAJ';
-  $Data::BitStream::Code::Escape::VERSION = '0.01';
+  $Data::BitStream::Code::Escape::VERSION = '0.08';
 }
 
 our $CODEINFO = { package   => __PACKAGE__,
                   name      => 'Escape',
                   universal => 1,
                   params    => 1,
-                  encodesub => sub {shift->put_escape([split('-',shift)], @_)},
-                  decodesub => sub {shift->get_escape([split('-',shift)], @_)}, };
+                  encodesub => sub {put_escape(shift,[split('-',shift)], @_)},
+                  decodesub => sub {get_escape(shift,[split('-',shift)], @_)}, };
 
 use Moo::Role;
 requires qw(read write maxbits);
@@ -112,7 +112,7 @@ Data::BitStream::Code::Escape - A Role implementing Escape codes
 
 =head1 VERSION
 
-version 0.01
+version 0.08
 
 =head1 DESCRIPTION
 
